@@ -682,7 +682,7 @@ def main():
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
-    # Set up webhook with correct web process configuration
+    # Set up webhook with correct configuration
     if webhook_url:
         # Use provided webhook URL if available
         webhook_path = webhook_url.split('/')[-1]
@@ -691,7 +691,6 @@ def main():
             port=port,
             url_path=webhook_path,
             webhook_url=webhook_url,
-            webhook_url_path=webhook_path,  # Added to ensure proper webhook path
             drop_pending_updates=True
         )
     elif heroku_app_name:
@@ -702,7 +701,6 @@ def main():
             port=port,
             url_path=token,
             webhook_url=webhook_url,
-            webhook_url_path=token,  # Added to ensure proper webhook path
             drop_pending_updates=True
         )
     else:
