@@ -647,8 +647,13 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     token = os.getenv('BOT_TOKEN')
+    port = int(os.getenv('PORT', '8443'))
+    heroku_app_name = os.getenv('HEROKU_APP_NAME')
+    
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
+    if not heroku_app_name:
+        raise ValueError("No HEROKU_APP_NAME found in environment variables")
     
     application = Application.builder().token(token).build()
     
@@ -663,19 +668,24 @@ def main():
         fallbacks=[CommandHandler('start', start)]
     )
     
+    # Add all handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("info", get_user_info))  # Add the new info command
+    application.add_handler(CommandHandler("info", get_user_info))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(conv_handler)
-    
-    # Add handlers for admin commands
     application.add_handler(CommandHandler("paid", handle_paid_command))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
-    print("Bot started...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Set up webhook
+    webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=token,
+        webhook_url=webhook_url
+    )
 
 if __name__ == '__main__':
     main()
