@@ -682,7 +682,7 @@ def main():
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
-    # Set up webhook with correct configuration
+    # Set up webhook with proper error handling and configuration
     if webhook_url:
         # Use provided webhook URL if available
         webhook_path = webhook_url.split('/')[-1]
@@ -691,7 +691,13 @@ def main():
             port=port,
             url_path=webhook_path,
             webhook_url=webhook_url,
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            secret_token=token,  # Add secret token for webhook security
+            allowed_updates=[  # Specify allowed update types
+                "message",
+                "callback_query",
+                "chat_member"
+            ]
         )
     elif heroku_app_name:
         # Fallback to constructing URL from Heroku app name
@@ -701,7 +707,13 @@ def main():
             port=port,
             url_path=token,
             webhook_url=webhook_url,
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            secret_token=token,  # Add secret token for webhook security
+            allowed_updates=[  # Specify allowed update types
+                "message",
+                "callback_query",
+                "chat_member"
+            ]
         )
     else:
         raise ValueError("Either WEBHOOK_URL or HEROKU_APP_NAME must be set in environment variables")
