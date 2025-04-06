@@ -648,12 +648,11 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     token = os.getenv('BOT_TOKEN')
     port = int(os.getenv('PORT', '8443'))
+    webhook_url = os.getenv('WEBHOOK_URL')
     heroku_app_name = os.getenv('HEROKU_APP_NAME')
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
-    if not heroku_app_name:
-        raise ValueError("No HEROKU_APP_NAME found in environment variables")
     
     application = Application.builder().token(token).build()
     
@@ -665,7 +664,9 @@ def main():
             BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
             ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)]
         },
-        fallbacks=[CommandHandler('start', start)]
+
+        fallbacks=[CommandHandler('start', start)],
+        per_message=True  # Added to fix the warning
     )
     
     # Add all handlers
@@ -679,13 +680,26 @@ def main():
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
     # Set up webhook
-    webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=token,
-        webhook_url=webhook_url
-    )
+    if webhook_url:
+        # Use provided webhook URL if available
+        webhook_path = webhook_url.split('/')[-1]
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=webhook_path,
+            webhook_url=webhook_url
+        )
+    elif heroku_app_name:
+        # Fallback to constructing URL from Heroku app name
+        webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=token,
+            webhook_url=webhook_url
+        )
+    else:
+        raise ValueError("Either WEBHOOK_URL or HEROKU_APP_NAME must be set in environment variables")
 
 if __name__ == '__main__':
     main()
