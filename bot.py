@@ -660,18 +660,16 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
         states={
-            ACCOUNT_NAME: [
-                CallbackQueryHandler(button_handler),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)
-            ],
+            ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
             BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
-            ACCOUNT_NUMBER: [
-                CallbackQueryHandler(button_handler),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
-            ]
+            ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)]
         },
-        fallbacks=[CallbackQueryHandler(button_handler)],
-        per_message=False  # Changed to False to allow mixed handlers
+        fallbacks=[
+            CommandHandler('start', start),
+            CallbackQueryHandler(button_handler)
+        ],
+        name="withdrawal_conversation",
+        persistent=False
     )
     
     # Add all handlers
@@ -693,7 +691,8 @@ def main():
             port=port,
             url_path=webhook_path,
             webhook_url=webhook_url,
-            drop_pending_updates=True  # Added to handle pending updates
+            webhook_url_path=webhook_path,  # Added to ensure proper webhook path
+            drop_pending_updates=True
         )
     elif heroku_app_name:
         # Fallback to constructing URL from Heroku app name
@@ -703,7 +702,8 @@ def main():
             port=port,
             url_path=token,
             webhook_url=webhook_url,
-            drop_pending_updates=True  # Added to handle pending updates
+            webhook_url_path=token,  # Added to ensure proper webhook path
+            drop_pending_updates=True
         )
     else:
         raise ValueError("Either WEBHOOK_URL or HEROKU_APP_NAME must be set in environment variables")
