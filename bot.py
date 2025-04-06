@@ -656,30 +656,35 @@ def main():
     
     application = Application.builder().token(token).build()
     
-    # Create conversation handler for withdrawal process
+    # Create conversation handler for withdrawal process with proper message context
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
         states={
-            ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
+            ACCOUNT_NAME: [
+                CallbackQueryHandler(button_handler),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)
+            ],
             BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
-            ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)]
+            ACCOUNT_NUMBER: [
+                CallbackQueryHandler(button_handler),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
+            ]
         },
-
-        fallbacks=[CommandHandler('start', start)],
-        per_message=True  # Added to fix the warning
+        fallbacks=[CallbackQueryHandler(button_handler)],
+        per_message=False  # Changed to False to allow mixed handlers
     )
     
     # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(conv_handler)  # Move conversation handler before general callback handler
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(conv_handler)
     application.add_handler(CommandHandler("paid", handle_paid_command))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
-    # Set up webhook
+    # Set up webhook with correct web process configuration
     if webhook_url:
         # Use provided webhook URL if available
         webhook_path = webhook_url.split('/')[-1]
@@ -687,7 +692,8 @@ def main():
             listen="0.0.0.0",
             port=port,
             url_path=webhook_path,
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
+            drop_pending_updates=True  # Added to handle pending updates
         )
     elif heroku_app_name:
         # Fallback to constructing URL from Heroku app name
@@ -696,7 +702,8 @@ def main():
             listen="0.0.0.0",
             port=port,
             url_path=token,
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
+            drop_pending_updates=True  # Added to handle pending updates
         )
     else:
         raise ValueError("Either WEBHOOK_URL or HEROKU_APP_NAME must be set in environment variables")
