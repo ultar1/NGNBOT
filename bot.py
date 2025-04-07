@@ -40,6 +40,7 @@ LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
 CHAT_REWARD = 1  # ₦1 per chat message
 MAX_DAILY_CHAT_REWARD = 50  # Maximum ₦50 from chat per day
 TASK_REWARD = 100  # ₦100 reward for completing task
+WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
 # Store user data in memory
 last_chat_reward = {}  # Track daily chat rewards
@@ -293,44 +294,66 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     is_existing_user = user.id in user_balances
     
-    # Check if user is member of both channel and group
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        # Store referral info if this is a referred user
-        if context.args and len(context.args) > 0:
+    # Show verification menu first
+    keyboard = [
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')],
+    ]
+    
+    # Store referral info if this is a referred user
+    if context.args and len(context.args) > 0:
+        try:
             referrer_id = int(context.args[0])
             if referrer_id != user.id:
                 pending_referrals[user.id] = referrer_id
-        
-        if is_existing_user:
-            await update.message.reply_text(
-                f"👋 Welcome back {user.first_name}!\n"
-                "⚠️ Please join our channel and group to continue using the bot."
-            )
+        except ValueError:
+            pass
+    
+    welcome_text = (
+        f"👋 Welcome{'back' if is_existing_user else ''} to Sub9ja Bot!\n\n"
+        "📱 Earn money by:\n"
+        "• Referring friends\n"
+        "• Completing tasks\n"
+        "• Daily bonuses\n"
+        "• Chat rewards\n\n"
+        "✅ Please verify your membership to continue:"
+    )
+    
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle verification button click"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    await query.answer()
+    
+    # Check membership
+    is_member = await check_membership(user_id, context)
+    if not is_member:
         await show_join_message(update, context)
         return
     
+    is_existing_user = user_id in user_balances
+    
     # Handle new users
     if not is_existing_user:
-        user_balances[user.id] = WELCOME_BONUS  # Welcome bonus
-        referrals[user.id] = set()
-        await update.message.reply_text(
+        user_balances[user_id] = WELCOME_BONUS
+        referrals[user_id] = set()
+        await query.message.edit_text(
             f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-        )
-    else:
-        # Welcome back message for existing users
-        await update.message.reply_text(
-            f"👋 Welcome back {user.first_name}!\n"
-            "You've been successfully verified. Here's your dashboard:"
         )
     
     # Check for daily sign-in bonus
-    daily_bonus_earned = await check_and_credit_daily_bonus(user.id)
+    daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
     if daily_bonus_earned:
-        await update.message.reply_text(
-            f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})"
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})"
         )
-
+    
     # Show dashboard
     await show_dashboard(update, context)
 
@@ -344,6 +367,10 @@ WITHDRAWAL_AMOUNT = 3  # Add this near other conversation states
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
+
+    if query.data == 'verify_membership':
+        await handle_verify_membership(update, context)
+        return
 
     if query.data == 'check_membership':
         is_member = await check_membership(user_id, context)
@@ -688,6 +715,95 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
     )
     return ACCOUNT_NUMBER
 
+async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    account_number = update.message.text.strip()
+    
+    # Validate account number (10 digits for Nigerian banks)
+    if not account_number.isdigit() or len(account_number) != 10:
+        await update.message.reply_text(
+            "❌ Invalid account number! Please enter a valid 10-digit account number."
+        )
+        return ACCOUNT_NUMBER
+    
+    # Store account number and show amount selection
+    user_data = user_withdrawal_state.get(user_id, {})
+    user_data['account_number'] = account_number
+    user_withdrawal_state[user_id] = user_data
+    
+    # Show amount selection buttons
+    balance = user_balances.get(user_id, 0)
+    keyboard = []
+    row = []
+    
+    for amount in WITHDRAWAL_AMOUNTS:
+        if amount <= balance:
+            row.append(InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}'))
+            if len(row) == 2:  # Two buttons per row
+                keyboard.append(row)
+                row = []
+    
+    if row:  # Add remaining buttons
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')])
+    
+    await update.message.reply_text(
+        f"💰 Select withdrawal amount:\n"
+        f"Your balance: ₦{balance}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return 'SELECT_AMOUNT'  # New state for amount selection
+
+async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle amount selection from buttons"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    await query.answer()
+    
+    if query.data == 'back_to_menu':
+        if user_id in user_withdrawal_state:
+            del user_withdrawal_state[user_id]
+        await show_dashboard(update, context)
+        return ConversationHandler.END
+    
+    amount = int(query.data.replace('withdraw_amount_', ''))
+    user_data = user_withdrawal_state.get(user_id, {})
+    
+    # Process withdrawal
+    withdrawal_amount = amount
+    balance = user_balances.get(user_id, 0)
+    
+    if withdrawal_amount > balance:
+        await query.message.edit_text(
+            "❌ Insufficient balance for this withdrawal amount!"
+        )
+        return ConversationHandler.END
+    
+    # Update user balance and last withdrawal date
+    user_balances[user_id] = balance - withdrawal_amount
+    last_withdrawal[user_id] = datetime.now().date()
+    
+    # Send withdrawal notification to admin
+    await notify_withdrawal_request(user_id, withdrawal_amount, user_data, context)
+    
+    # Show confirmation to user
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+    await query.message.edit_text(
+        f"✅ Withdrawal request successful!\n\n"
+        f"Account Details:\n"
+        f"Name: {user_data['account_name']}\n"
+        f"Bank: {user_data['bank']}\n"
+        f"Account Number: {user_data['account_number']}\n"
+        f"Amount: ₦{withdrawal_amount}\n"
+        f"Remaining balance: ₦{user_balances[user_id]}\n\n"
+        f"Your payment will be processed within 24 hours!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    return ConversationHandler.END
+
 async def notify_withdrawal_request(user_id: int, amount: int, account_info: dict, context: ContextTypes.DEFAULT_TYPE):
     try:
         user = await context.bot.get_chat(user_id)
@@ -713,47 +829,6 @@ async def notify_withdrawal_request(user_id: int, amount: int, account_info: dic
         )
     except Exception as e:
         print(f"Failed to send withdrawal notification: {e}")
-
-async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    account_number = update.message.text.strip()
-    
-    # Validate account number (10 digits for Nigerian banks)
-    if not account_number.isdigit() or len(account_number) != 10:
-        await update.message.reply_text(
-            "❌ Invalid account number! Please enter a valid 10-digit account number."
-        )
-        return ACCOUNT_NUMBER
-    
-    # Process withdrawal
-    user_data = user_withdrawal_state[user_id]
-    withdrawal_amount = user_data.get('amount', 0)
-    
-    # Store account number
-    user_data['account_number'] = account_number
-    
-    # Update user balance and last withdrawal date
-    user_balances[user_id] = user_balances.get(user_id, 0) - withdrawal_amount
-    last_withdrawal[user_id] = datetime.now().date()
-    
-    # Send withdrawal notification to admin only
-    await notify_withdrawal_request(user_id, withdrawal_amount, user_data, context)
-    
-    # Show confirmation to user
-    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-    await update.message.reply_text(
-        f"✅ Withdrawal request successful!\n\n"
-        f"Account Details:\n"
-        f"Name: {user_data['account_name']}\n"
-        f"Bank: {user_data['bank']}\n"
-        f"Account Number: {account_number}\n"
-        f"Amount: ₦{withdrawal_amount}\n"
-        f"Remaining balance: ₦{user_balances[user_id]}\n\n"
-        f"Your payment will be processed within 24 hours!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    return ConversationHandler.END
 
 async def is_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID
@@ -1158,7 +1233,8 @@ def main():
             WITHDRAWAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_withdrawal_amount)],
             ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
             BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
-            ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)]
+            ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)],
+            'SELECT_AMOUNT': [CallbackQueryHandler(handle_amount_selection, pattern='^withdraw_amount_')]
         },
         fallbacks=[
             CommandHandler('start', start),
