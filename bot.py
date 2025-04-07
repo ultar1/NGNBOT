@@ -70,6 +70,15 @@ AUTO_REPLIES = {
     'thank you': "You're welcome! Let me know if you need anything else! 🤗",
 }
 
+# Conversation states
+(
+    WITHDRAWAL_AMOUNT,
+    ACCOUNT_NAME,
+    BANK_NAME,
+    ACCOUNT_NUMBER,
+    PAYMENT_SCREENSHOT,  # New state for payment screenshot
+) = range(5)
+
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -556,7 +565,7 @@ async def notify_withdrawal_request(user_id: int, amount: int, account_info: dic
             f"• Account Name: {account_info['account_name']}\n"
             f"• Bank: {account_info['bank']}\n"
             f"• Account Number: {account_info['account_number']}\n\n"
-            f"Use /paid {user_id} to mark as paid\n"
+            f"Use /paid {user_id} to mark as paid (send screenshot after)\n"
             f"Use /reject {user_id} to reject"
         )
         
@@ -589,19 +598,8 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     user_balances[user_id] = user_balances.get(user_id, 0) - withdrawal_amount
     last_withdrawal[user_id] = datetime.now().date()
     
-    # Send withdrawal notification to admin
+    # Send withdrawal notification to admin only
     await notify_withdrawal_request(user_id, withdrawal_amount, user_data, context)
-    
-    # Announce withdrawal request in channel
-    try:
-        announcement = (
-            f"🆕 New Withdrawal Request!\n"
-            f"Amount: ₦{withdrawal_amount}\n"
-            f"Status: Pending ⏳"
-        )
-        await context.bot.send_message(chat_id=ANNOUNCEMENT_CHANNEL, text=announcement)
-    except Exception as e:
-        print(f"Failed to send channel announcement: {e}")
     
     # Show confirmation to user
     keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
@@ -630,30 +628,63 @@ async def handle_paid_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ Usage: /paid <user_id>")
+        await update.message.reply_text(
+            "❌ Usage: /paid <user_id>\n"
+            "Please reply to this command with the payment screenshot!"
+        )
         return
     
     try:
         target_user_id = int(context.args[0])
+        
+        # Store the target user ID for screenshot handling
+        context.user_data['pending_payment_user'] = target_user_id
+        
+        await update.message.reply_text(
+            "Please send the payment screenshot to confirm the payment."
+        )
+        return PAYMENT_SCREENSHOT
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID!")
+        return
+
+async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle payment screenshot upload"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return ConversationHandler.END
+    
+    if not update.message.photo:
+        await update.message.reply_text("❌ Please send a photo/screenshot!")
+        return PAYMENT_SCREENSHOT
+    
+    target_user_id = context.user_data.get('pending_payment_user')
+    if not target_user_id:
+        await update.message.reply_text("❌ No pending payment to confirm!")
+        return ConversationHandler.END
+    
+    try:
         target_user = await context.bot.get_chat(target_user_id)
         
-        # Notify user
-        await context.bot.send_message(
+        # Forward screenshot to user
+        await context.bot.send_photo(
             chat_id=target_user_id,
-            text="✅ Your withdrawal has been processed and paid!"
+            photo=update.message.photo[-1].file_id,
+            caption="✅ Payment Confirmation\nYour withdrawal has been processed and paid!"
         )
         
-        # Announce in channel
-        announcement = (
-            f"💰 Payment Processed!\n"
-            f"User: @{target_user.username if target_user.username else 'Anonymous'}\n"
-            f"Status: Paid ✅"
-        )
-        await context.bot.send_message(chat_id=ANNOUNCEMENT_CHANNEL, text=announcement)
+        # Clear pending payment
+        del context.user_data['pending_payment_user']
         
-        await update.message.reply_text(f"✅ Marked payment as completed for user {target_user_id}")
+        await update.message.reply_text(f"✅ Payment marked as completed for user {target_user_id}")
+        
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
+    
+    return ConversationHandler.END
 
 async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -955,8 +986,8 @@ def main():
     
     application = Application.builder().token(token).build()
     
-    # Create conversation handler for withdrawal process with proper message context
-    conv_handler = ConversationHandler(
+    # Create conversation handler for withdrawal process
+    withdrawal_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
         states={
             WITHDRAWAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_withdrawal_amount)],
@@ -972,15 +1003,26 @@ def main():
         persistent=False
     )
     
+    # Create conversation handler for payment screenshot
+    payment_handler = ConversationHandler(
+        entry_points=[CommandHandler("paid", handle_paid_command)],
+        states={
+            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
+        },
+        fallbacks=[CommandHandler('start', start)],
+        name="payment_screenshot_conversation",
+        persistent=False
+    )
+    
     # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
     application.add_handler(CommandHandler("chatid", get_chat_id))  # Add new command
     application.add_handler(CommandHandler("generate", handle_generate_command))  # Add generate command
     application.add_handler(CommandHandler("redeem", handle_redeem_command))     # Add redeem command
-    application.add_handler(conv_handler)  # Move conversation handler before general callback handler
+    application.add_handler(withdrawal_handler)
+    application.add_handler(payment_handler)  # Add the new payment handler
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(CommandHandler("paid", handle_paid_command))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
