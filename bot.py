@@ -251,15 +251,18 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     keyboard = [
         [
             InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
-            InlineKeyboardButton("💰 Balance", callback_data='balance')
+            InlineKeyboardButton("💰 Balance", callback_data='balance'),
+            InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')
         ],
         [
             InlineKeyboardButton("🎯 Get Link", callback_data='get_link'),
-            InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')
+            InlineKeyboardButton("💸 Withdraw", callback_data='withdraw'),
+            InlineKeyboardButton("📝 Submit Task", callback_data='submit_task')
         ],
         [
             InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
-            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
+            InlineKeyboardButton("📋 My Tasks", callback_data='tasks'),
+            InlineKeyboardButton("💬 Support", callback_data='support')
         ]
     ]
     
