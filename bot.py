@@ -16,12 +16,32 @@ load_dotenv()
 
 # Database setup
 DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL.startswith("postgres://"):  # Fix Heroku's DATABASE_URL
+if DATABASE_URL is None:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+# Fix Heroku's postgres:// URLs to postgresql://
+if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL)
+# Configure SQLAlchemy engine with proper connection pooling
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,  # Recycle connections every 30 minutes
+    pool_pre_ping=True  # Enable connection health checks
+)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
+
+# Create a connection pool manager
+def get_db_session():
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
 
 # Database Models
 class User(Base):
