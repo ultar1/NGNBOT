@@ -1376,6 +1376,34 @@ async def admin_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the /start command"""
+    user = update.effective_user
+    user_id = user.id
+    
+    # Check if this is a referral
+    if context.args and len(context.args) > 0:
+        try:
+            referrer_id = int(context.args[0])
+            if referrer_id != user_id:  # Prevent self-referral
+                pending_referrals[user_id] = referrer_id
+        except ValueError:
+            pass
+    
+    # Check if user exists 
+    if user_id not in user_balances:
+        user_balances[user_id] = 0
+        referrals[user_id] = set()
+    
+    # Check membership and show appropriate message
+    is_member = await check_membership(user_id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+    
+    # Show dashboard for verified users
+    await show_dashboard(update, context)
+
 def main():
     token = os.getenv('BOT_TOKEN')
     port = int(os.getenv('PORT', '8443'))
