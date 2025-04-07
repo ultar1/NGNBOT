@@ -43,6 +43,17 @@ def get_db_session():
         session.close()
 
 # Database Models
+class Activity(Base):
+    __tablename__ = 'activities'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.telegram_id'))
+    action_type = Column(String)  # e.g., 'login', 'chat', 'withdrawal', 'referral'
+    description = Column(String)
+    amount = Column(Float, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    
+    user = relationship('User', backref='activities')
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
@@ -51,9 +62,11 @@ class User(Base):
     last_signin = Column(DateTime)
     last_withdrawal = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())
+    is_verified = Column(Boolean, default=False)
     
     referrals = relationship('Referral', back_populates='referrer')
     withdrawals = relationship('Withdrawal', back_populates='user')
+    activities = relationship('Activity', back_populates='user')
 
 class Referral(Base):
     __tablename__ = 'referrals'
@@ -94,6 +107,36 @@ class CouponUsage(Base):
     used_at = Column(DateTime, server_default=func.now())
     
     coupon = relationship('Coupon', back_populates='used_by')
+
+def log_activity(session, user_id: int, action_type: str, description: str, amount: float = None):
+    """Log user activity to the database"""
+    try:
+        activity = Activity(
+            user_id=user_id,
+            action_type=action_type,
+            description=description,
+            amount=amount
+        )
+        session.add(activity)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"Error logging activity: {e}")
+
+def verify_user(session, user_id: int) -> bool:
+    """Enhanced verification check for user"""
+    try:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            return False
+        if not user.is_verified:
+            return False
+        # Log verification check
+        log_activity(session, user_id, "verification", "User verification check performed")
+        return True
+    except Exception as e:
+        print(f"Error during verification: {e}")
+        return False
 
 # Create all tables
 Base.metadata.create_all(engine)
@@ -225,6 +268,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     "Loading your dashboard..."
                 )
                 update_user_balance(session, user_id, WELCOME_BONUS)
+                log_activity(session, user_id, 'welcome_bonus', 'Received welcome bonus', WELCOME_BONUS)
             
             # Check for daily bonus
             daily_bonus_earned = check_and_credit_daily_bonus(session, user_id)
@@ -233,6 +277,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     chat_id=user_id,
                     text=f"📅 Daily Bonus!\nYou earned ₦{DAILY_BONUS} for logging in today!"
                 )
+                log_activity(session, user_id, 'daily_bonus', 'Received daily bonus', DAILY_BONUS)
             
             # Show dashboard
             await show_dashboard(update, context)
@@ -377,6 +422,8 @@ async def handle_withdrawal_amount(update: Update, context: ContextTypes.DEFAULT
         session.add(withdrawal)
         session.commit()
         
+        log_activity(session, user_id, 'withdrawal_request', 'Requested withdrawal', amount)
+        
         await update.message.reply_text(
             "Please enter your Account Name (as shown in your bank):"
         )
@@ -398,6 +445,8 @@ async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE
         if withdrawal:
             withdrawal.account_name = account_name
             session.commit()
+            
+            log_activity(session, user_id, 'account_name', 'Provided account name', None)
             
             # Show bank selection buttons
             keyboard = [[InlineKeyboardButton(bank, callback_data=f"bank_{bank}")] for bank in BANKS]
@@ -426,6 +475,8 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
         if withdrawal:
             withdrawal.bank_name = selected_bank
             session.commit()
+            
+            log_activity(session, user_id, 'bank_selection', f'Selected bank: {selected_bank}', None)
             
             await query.message.reply_text(
                 "Please enter your Account Number:"
@@ -462,6 +513,8 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
             # Update withdrawal status
             withdrawal.status = 'pending_admin'
             session.commit()
+            
+            log_activity(session, user_id, 'account_number', 'Provided account number', None)
             
             # Notify admin
             admin_message = (
@@ -526,52 +579,49 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    message = update.message
-    
-    # Check if this is a referral
-    if len(context.args) > 0:
-        try:
-            referrer_id = int(context.args[0])
-            if referrer_id != user.id:  # Prevent self-referral
-                session = Session()
-                try:
-                    # Check if user is new
-                    existing_user = session.query(User).filter_by(telegram_id=user.id).first()
-                    if not existing_user:
-                        # Add referral
-                        add_referral(session, referrer_id, user.id)
-                        # Credit referrer
-                        update_user_balance(session, referrer_id, REFERRAL_BONUS)
-                        # Notify referrer
-                        await context.bot.send_message(
-                            chat_id=referrer_id,
-                            text=f"🎉 New referral! You earned ₦{REFERRAL_BONUS}"
-                        )
-                finally:
-                    session.close()
-        except ValueError:
-            pass  # Invalid referral code, ignore
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
-            InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
-        ],
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
-    ]
-    
-    await message.reply_text(
-        f"👋 Welcome {user.first_name}!\n\n"
-        "To start earning:\n"
-        "1. Join our channel\n"
-        "2. Join our group\n"
-        "3. Click verify\n\n"
-        "You'll get:\n"
-        f"• ₦{WELCOME_BONUS} welcome bonus\n"
-        f"• ₦{REFERRAL_BONUS} per referral\n"
-        f"• ₦{DAILY_BONUS} daily login bonus",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    session = Session()
+    try:
+        existing_user = session.query(User).filter_by(telegram_id=user.id).first()
+        if not existing_user:
+            new_user = User(
+                telegram_id=user.id,
+                balance=0,
+                created_at=datetime.now()
+            )
+            session.add(new_user)
+            session.commit()
+            log_activity(session, user.id, "registration", "New user registered")
+        
+        welcome_message = """Welcome to the Airtime Bot! 🎉
+Please complete verification to access all features."""
+        
+        # Log start command usage
+        log_activity(session, user.id, "command", "Start command used")
+        await update.message.reply_text(welcome_message)
+    except Exception as e:
+        print(f"Error in start command: {e}")
+    finally:
+        session.close()
+
+async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    session = Session()
+    try:
+        if not verify_user(session, user.id):
+            await update.message.reply_text("Please complete verification first!")
+            return
+        
+        # Your existing withdrawal logic here
+        # ...existing code...
+        
+        # Log withdrawal attempt
+        log_activity(session, user.id, "withdrawal", f"Withdrawal request of {amount}", amount)
+        
+    except Exception as e:
+        print(f"Error in withdrawal: {e}")
+        await update.message.reply_text("An error occurred during withdrawal.")
+    finally:
+        session.close()
 
 # Add at the end of file:
 if __name__ == "__main__":
