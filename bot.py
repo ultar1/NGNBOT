@@ -7,8 +7,7 @@ from telegram.constants import ChatMemberStatus
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Table, MetaData, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
 
 # Load environment variables
@@ -512,6 +511,54 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     finally:
         session.close()
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    message = update.message
+    
+    # Check if this is a referral
+    if len(context.args) > 0:
+        try:
+            referrer_id = int(context.args[0])
+            if referrer_id != user.id:  # Prevent self-referral
+                session = Session()
+                try:
+                    # Check if user is new
+                    existing_user = session.query(User).filter_by(telegram_id=user.id).first()
+                    if not existing_user:
+                        # Add referral
+                        add_referral(session, referrer_id, user.id)
+                        # Credit referrer
+                        update_user_balance(session, referrer_id, REFERRAL_BONUS)
+                        # Notify referrer
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎉 New referral! You earned ₦{REFERRAL_BONUS}"
+                        )
+                finally:
+                    session.close()
+    
+    # Welcome message
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+            InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
+        ],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+    ]
+    
+    await message.reply_text(
+        f"👋 Welcome {user.first_name}!\n\n"
+        "To start earning:\n"
+        "1. Join our channel\n"
+        "2. Join our group\n"
+        "3. Click verify\n\n"
+        "You'll get:\n"
+        f"• ₦{WELCOME_BONUS} welcome bonus\n"
+        f"• ₦{REFERRAL_BONUS} per referral\n"
+        f"• ₦{DAILY_BONUS} daily login bonus",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # Add at the end of file:
 if __name__ == "__main__":
