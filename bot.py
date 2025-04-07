@@ -588,6 +588,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_top_referrals(update, context)
         return
 
+    elif query.data == 'submit_task':
+        await handle_submit_task_button(update, context)
+        return
+
 def escape_markdown(text: str) -> str:
     """Escape special characters for MarkdownV2"""
     special_chars = ['_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
@@ -622,6 +626,30 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         task_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='MarkdownV2'
+    )
+
+async def handle_submit_task_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle submit task button click"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 Create Content", callback_data='create_content_task')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+    ]
+    
+    await query.message.edit_text(
+        "📋 Content Creation Task:\n\n"
+        "Create engaging content about our bot:\n"
+        "• Write about features and benefits\n"
+        "• Include referral system info\n"
+        "• Make it attractive and informative\n\n"
+        "To submit your task:\n"
+        "1. Click 'Create Content'\n"
+        "2. Write your content\n"
+        "3. Submit using /task command\n\n"
+        "Reward: ₦100 on approval",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
