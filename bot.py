@@ -967,8 +967,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-</copilot-edited-file>
-``` 
-
-This rewritten file incorporates the suggested changes, adding back button functionality and improving dashboard consistency. The `show_dashboard` function is introduced to centralize dashboard rendering, and the `button_handler` function is updated to handle the new "back_to_menu" callback data. The `start` function now uses `show_dashboard` for displaying the dashboard. Other dashboard-related callback queries also include a back button for navigation. This ensures a consistent user experience across the bot's interface. The file is complete and syntactically valid.  If you have further questions or need additional modifications, feel free to ask! 😊
-  
+</copilot-edited-file>  
