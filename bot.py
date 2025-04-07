@@ -9,6 +9,20 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Table, MetaData, Boolean
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
+import threading
+from flask import Flask
+import logging
+
+# Initialize Flask app
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return 'Bot is running'
+
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    flask_app.run(host='0.0.0.0', port=port)
 
 # Load environment variables
 load_dotenv()
@@ -625,6 +639,11 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Add at the end of file:
 if __name__ == "__main__":
+    # Start the Flask server in a separate thread
+    server_thread = threading.Thread(target=run_flask)
+    server_thread.start()
+    
+    # Start the bot
     app = Application.builder().token(os.getenv('BOT_TOKEN')).build()
     
     # Add handlers
