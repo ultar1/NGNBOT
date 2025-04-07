@@ -461,7 +461,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif query.data == 'tasks':
-        await handle_tasks(update, context)
+        await tasks(update, context)
         return
 
 def escape_markdown(text: str) -> str:
@@ -471,48 +471,62 @@ def escape_markdown(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     return text
 
-async def handle_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tasks menu"""
+async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show available tasks"""
     keyboard = [
-        [InlineKeyboardButton("📱 Submit Task", callback_data='submit_task')],
-        [InlineKeyboardButton("⬅️ Back", callback_data='back_to_dashboard')]
+        [InlineKeyboardButton("📋 Submit Task", callback_data='submit_task')],
+        [InlineKeyboardButton("🔙 Back", callback_data='dashboard')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text(
-        text="📝 *Available Task*\n\n"
-        "Share our content on your social media and earn ₦500!\n\n"
-        "*Requirements:*\n"
-        "1. Share the provided content on your social media\n"
+    
+    text = (
+        "*Available Task* 📝\n\n"
+        "Reward: ₦500\n\n"
+        "📌 *Task Requirements:*\n"
+        "1. Share our content on your social media\n"
         "2. Take a screenshot of your post\n"
         "3. Submit the screenshot here for verification\n\n"
-        "*Note:* Your reward will be credited after verification.",
+        "Note: Your reward will be credited after verification."
+    )
+    
+    await update.callback_query.edit_message_text(
+        text=text,
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
 async def submit_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission"""
-    context.user_data['expecting_screenshot'] = True
     await update.callback_query.edit_message_text(
-        text="Please send the screenshot of your post to verify your task completion.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Cancel", callback_data='tasks')]])
+        "Please send the screenshot of your post as proof of completion.\n"
+        "Make sure the screenshot clearly shows the shared content.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='tasks')]])
     )
+    context.user_data['awaiting_screenshot'] = True
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle screenshot submission"""
+async def handle_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle screenshot verification"""
+    if not context.user_data.get('awaiting_screenshot'):
+        return
+    
     user = update.effective_user
-    if context.user_data.get('expecting_screenshot'):
-        # Clear the expectation flag
-        context.user_data['expecting_screenshot'] = False
+    if update.message.photo:
+        # Reset the awaiting screenshot flag
+        context.user_data['awaiting_screenshot'] = False
         
         # Add reward to user's balance
-        user_balances[user.id] = user_balances.get(user.id, 0) + TASK_REWARD
+        user_balances[user.id] = user_balances.get(user.id, 0) + 500
         
-        keyboard = [[InlineKeyboardButton("🏠 Back to Dashboard", callback_data='dashboard')]]
+        keyboard = [[InlineKeyboardButton("🔙 Back to Dashboard", callback_data='dashboard')]]
         await update.message.reply_text(
-            f"✅ Thank you! Your screenshot has been received and verified.\n"
-            f"₦{TASK_REWARD} has been added to your balance!",
+            "✅ Your task submission has been received!\n\n"
+            "₦500 has been added to your balance.",
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text(
+            "❌ Please send a screenshot image of your post.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='tasks')]])
         )
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1258,7 +1272,7 @@ def main():
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Add message handler
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # Add photo handler for task submission
+    application.add_handler(MessageHandler(filters.PHOTO, handle_screenshot))  # Add photo handler for task submission
     
     # Set up webhook with proper error handling and configuration
     if webhook_url:
