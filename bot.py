@@ -650,6 +650,7 @@ def main():
     port = int(os.getenv('PORT', '8443'))
     webhook_url = os.getenv('WEBHOOK_URL')
     heroku_app_name = os.getenv('HEROKU_APP_NAME')
+    secret = os.getenv('WEBHOOK_SECRET', 'your-256-bit-secret-token')  # Add secret token env var
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
@@ -692,8 +693,8 @@ def main():
             url_path=webhook_path,
             webhook_url=webhook_url,
             drop_pending_updates=True,
-            secret_token=token,  # Add secret token for webhook security
-            allowed_updates=[  # Specify allowed update types
+            secret_token=secret,  # Use proper secret token
+            allowed_updates=[
                 "message",
                 "callback_query",
                 "chat_member"
@@ -708,8 +709,8 @@ def main():
             url_path=token,
             webhook_url=webhook_url,
             drop_pending_updates=True,
-            secret_token=token,  # Add secret token for webhook security
-            allowed_updates=[  # Specify allowed update types
+            secret_token=secret,  # Use proper secret token
+            allowed_updates=[
                 "message",
                 "callback_query",
                 "chat_member"
