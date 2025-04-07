@@ -144,16 +144,22 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             
         # Check group membership using numeric ID
         try:
-            # Don't convert to int since the ID is already in correct format
             group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
             print(f"Group status for user {user_id}: {group_member.status}")
         except Exception as e:
             print(f"Error checking group membership: {str(e)}")
             return False
         
+        # Use correct ChatMemberStatus values
+        valid_member_status = [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER  # Changed from CREATOR to OWNER
+        ]
+        
         is_verified = (
-            channel_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR] and
-            group_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+            channel_member.status in valid_member_status and
+            group_member.status in valid_member_status
         )
         
         print(f"Is user {user_id} verified? {is_verified}")
