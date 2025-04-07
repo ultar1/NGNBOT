@@ -584,6 +584,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_tasks_button(update, context)
         return
 
+    elif query.data == 'top_referrals':
+        await handle_top_referrals(update, context)
+        return
+
 def escape_markdown(text: str) -> str:
     """Escape special characters for MarkdownV2"""
     special_chars = ['_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
@@ -1258,6 +1262,92 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return  # Just let the message through without auto-reply
 
+async def handle_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top 5 users with most referrals"""
+    query = update.callback_query
+    await query.answer()
+
+    # Sort users by referral count
+    top_users = []
+    for user_id, refs in referrals.items():
+        ref_count = len(refs)
+        earnings = ref_count * REFERRAL_BONUS
+        top_users.append((user_id, ref_count, earnings))
+    
+    top_users.sort(key=lambda x: x[1], reverse=True)
+    top_users = top_users[:5]  # Get top 5
+
+    message = "🏆 Top 5 Referrers\n───────────────\n\n"
+    
+    for idx, (user_id, ref_count, earnings) in enumerate(top_users, 1):
+        try:
+            user = await context.bot.get_chat(user_id)
+            username = f"@{user.username}" if user.username else "No username"
+            message += f"{idx}. {username}\n   • {ref_count} referrals\n   • ₦{earnings} earned\n\n"
+        except:
+            continue
+
+    if not top_users:
+        message = "No referrals yet! Start inviting friends to earn rewards! 🎯"
+
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+    await query.message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to get user info by ID"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /info <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        user_data = await context.bot.get_chat(target_user_id)
+        
+        balance = user_balances.get(target_user_id, 0)
+        ref_count = len(referrals.get(target_user_id, set()))
+        ref_earnings = ref_count * REFERRAL_BONUS
+        daily_chats = daily_chat_count.get(target_user_id, 0)
+        
+        info = (
+            f"👤 User Information\n"
+            f"───────────────\n"
+            f"ID: {user_data.id}\n"
+            f"Name: {user_data.first_name} {user_data.last_name if user_data.last_name else ''}\n"
+            f"Username: @{user_data.username if user_data.username else 'None'}\n\n"
+            
+            f"💰 Balance & Activity\n"
+            f"───────────────\n"
+            f"Current Balance: ₦{balance}\n"
+            f"Total Referrals: {ref_count}\n"
+            f"Referral Earnings: ₦{ref_earnings}\n"
+            f"Daily Chat Messages: {daily_chats}/{MAX_DAILY_CHAT_REWARD}\n"
+            f"Last Sign-in: {last_signin.get(target_user_id, 'Never')}\n"
+            f"Last Withdrawal: {last_withdrawal.get(target_user_id, 'Never')}"
+        )
+        
+        # Add referred users if any
+        if target_user_id in referrals and referrals[target_user_id]:
+            info += "\n\nReferred Users:\n"
+            for ref_id in referrals[target_user_id]:
+                try:
+                    ref_user = await context.bot.get_chat(ref_id)
+                    info += f"• {ref_user.full_name} (@{ref_user.username if ref_user.username else 'No username'})\n"
+                except:
+                    info += f"• User {ref_id}\n"
+        
+        await update.message.reply_text(info)
+        
+    except ValueError:
+        await update.message.reply_text("❌ Please provide a valid user ID!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
 def main():
     token = os.getenv('BOT_TOKEN')
     port = int(os.getenv('PORT', '8443'))
@@ -1314,6 +1404,7 @@ def main():
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    application.add_handler(CommandHandler("info", admin_info_command))  # Add admin info command
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Add message handler
     
     # Set up webhook with proper error handling and configuration
