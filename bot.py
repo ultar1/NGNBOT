@@ -66,7 +66,7 @@ class Activity(Base):
     amount = Column(Float, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     
-    user = relationship('User', backref='activities')
+    user = relationship('User', back_populates='activities')
 
 class User(Base):
     __tablename__ = 'users'
