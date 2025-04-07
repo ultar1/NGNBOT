@@ -23,7 +23,7 @@ BOT_USERNAME = "sub9ja_bot"
 
 # Channel and Group IDs
 CHANNEL_USERNAME = "latestinfoult"
-GROUP_USERNAME = "-4171256761"  # Changed to numeric ID format
+GROUP_USERNAME = "-1002250504941"  # Updated with correct group ID
 REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
