@@ -33,7 +33,8 @@ REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for butto
 WELCOME_BONUS = 100  # ₦100
 REFERRAL_BONUS = 70  # ₦70
 DAILY_BONUS = 25  # ₦25
-MIN_WITHDRAWAL = 500  # ₦500
+MIN_WITHDRAWAL = 500  # ₦500 minimum withdrawal
+MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
 LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
 CHAT_REWARD = 1  # ₦1 per chat message
 MAX_DAILY_CHAT_REWARD = 50  # Maximum ₦50 from chat per day
@@ -337,6 +338,8 @@ async def can_withdraw_today(user_id: int) -> bool:
     last_date = last_withdrawal.get(user_id)
     return last_date is None or last_date < today
 
+WITHDRAWAL_AMOUNT = 3  # Add this near other conversation states
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -406,27 +409,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hours = int(time_until.total_seconds() // 3600)
             minutes = int((time_until.total_seconds() % 3600) // 60)
             
-            await query.message.reply_text(
+            keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+            await query.message.edit_text(
                 f"❌ You can only withdraw once per day!\n"
-                f"Next withdrawal available in {hours}h {minutes}m ⏳"
+                f"Next withdrawal available in {hours}h {minutes}m ⏳",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
         
         if balance < MIN_WITHDRAWAL:
             await query.answer()
-            await query.message.reply_text(
+            keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+            await query.message.edit_text(
                 f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
-                f"Your current balance: {balance} points (₦{balance})"
+                f"Your current balance: {balance} points (₦{balance})",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
         
-        # Start withdrawal process
-        user_withdrawal_state[user_id] = {'stage': 'account_name'}
+        # Start withdrawal process with amount input
+        user_withdrawal_state[user_id] = {'stage': 'withdrawal_amount'}
         await query.answer()
-        await query.message.reply_text(
-            "Please enter your Account Name (as shown in your bank):"
+        max_allowed = min(balance, MAX_WITHDRAWAL)  # Can't withdraw more than balance or max limit
+        
+        keyboard = [[InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]]
+        await query.message.edit_text(
+            f"💰 Enter withdrawal amount:\n\n"
+            f"Minimum: ₦{MIN_WITHDRAWAL}\n"
+            f"Maximum: ₦{max_allowed}\n"
+            f"Your balance: ₦{balance}\n\n"
+            f"Please enter an amount between ₦{MIN_WITHDRAWAL} and ₦{max_allowed}:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return ACCOUNT_NAME
+        return WITHDRAWAL_AMOUNT
 
     elif query.data == 'daily_bonus':
         daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
@@ -444,6 +459,47 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         return
+
+async def handle_withdrawal_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    amount_text = update.message.text.strip()
+    
+    try:
+        amount = int(amount_text)
+        balance = user_balances.get(user_id, 0)
+        max_allowed = min(balance, MAX_WITHDRAWAL)
+        
+        if amount < MIN_WITHDRAWAL:
+            await update.message.reply_text(
+                f"❌ Minimum withdrawal amount is ₦{MIN_WITHDRAWAL}!\n"
+                f"Please enter a larger amount:"
+            )
+            return WITHDRAWAL_AMOUNT
+            
+        if amount > max_allowed:
+            await update.message.reply_text(
+                f"❌ Maximum withdrawal amount is ₦{max_allowed}!\n"
+                f"Please enter a smaller amount:"
+            )
+            return WITHDRAWAL_AMOUNT
+            
+        # Store amount and continue with account name
+        user_withdrawal_state[user_id].update({
+            'stage': 'account_name',
+            'amount': amount
+        })
+        
+        await update.message.reply_text(
+            "Please enter your Account Name (as shown in your bank):"
+        )
+        return ACCOUNT_NAME
+        
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Please enter a valid number!\n"
+            f"Enter an amount between ₦{MIN_WITHDRAWAL} and ₦{max_allowed}:"
+        )
+        return WITHDRAWAL_AMOUNT
 
 async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -524,41 +580,41 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Process withdrawal
     user_data = user_withdrawal_state[user_id]
-    balance = user_balances[user_id]
-    cash_amount = balance  # 1:1 conversion (100 points = ₦100)
+    withdrawal_amount = user_data.get('amount', 0)
     
-    # Store account number and amount
+    # Store account number
     user_data['account_number'] = account_number
-    user_data['amount'] = cash_amount
     
     # Update user balance and last withdrawal date
-    user_balances[user_id] = 0
+    user_balances[user_id] = user_balances.get(user_id, 0) - withdrawal_amount
     last_withdrawal[user_id] = datetime.now().date()
     
     # Send withdrawal notification to admin
-    await notify_withdrawal_request(user_id, cash_amount, user_data, context)
+    await notify_withdrawal_request(user_id, withdrawal_amount, user_data, context)
     
     # Announce withdrawal request in channel
     try:
         announcement = (
             f"🆕 New Withdrawal Request!\n"
-            f"Amount: ₦{cash_amount}\n"
+            f"Amount: ₦{withdrawal_amount}\n"
             f"Status: Pending ⏳"
         )
         await context.bot.send_message(chat_id=ANNOUNCEMENT_CHANNEL, text=announcement)
     except Exception as e:
         print(f"Failed to send channel announcement: {e}")
     
+    # Show confirmation to user
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
     await update.message.reply_text(
         f"✅ Withdrawal request successful!\n\n"
         f"Account Details:\n"
         f"Name: {user_data['account_name']}\n"
         f"Bank: {user_data['bank']}\n"
         f"Account Number: {account_number}\n"
-        f"Amount: ₦{cash_amount}\n"
-        f"Points used: {balance}\n"
-        f"Remaining balance: 0 points\n\n"
-        f"Your payment will be processed within 24 hours!"
+        f"Amount: ₦{withdrawal_amount}\n"
+        f"Remaining balance: ₦{user_balances[user_id]}\n\n"
+        f"Your payment will be processed within 24 hours!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
     
     return ConversationHandler.END
@@ -903,6 +959,7 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
         states={
+            WITHDRAWAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_withdrawal_amount)],
             ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
             BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
             ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)]
