@@ -170,6 +170,18 @@ def check_and_credit_daily_bonus(session, user_id):
         return True
     return False
 
+async def check_membership(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        # Check channel membership
+        channel_member = await context.bot.get_chat_member(chat_id=f"@{CHANNEL_USERNAME}", user_id=user_id)
+        # Check group membership
+        group_member = await context.bot.get_chat_member(chat_id=REQUIRED_GROUP, user_id=user_id)
+        
+        return (channel_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER] and
+                group_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER])
+    except Exception:
+        return False
+
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -537,8 +549,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                 finally:
                     session.close()
+        except ValueError:
+            pass  # Invalid referral code, ignore
     
-    # Welcome message
     keyboard = [
         [
             InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
