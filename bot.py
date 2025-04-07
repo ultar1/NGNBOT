@@ -195,6 +195,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id not in user_verified_status:
         user_verified_status[user.id] = False
     
+    is_existing_user = user.id in user_balances
+    
     # Check if user is member of both channel and group
     is_member = await check_membership(user.id, context)
     if not is_member:
@@ -204,15 +206,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if referrer_id != user.id:
                 pending_referrals[user.id] = referrer_id
         
+        if is_existing_user:
+            await update.message.reply_text(
+                f"👋 Welcome back {user.first_name}!\n"
+                "⚠️ Please join our channel and group to continue using the bot."
+            )
         await show_join_message(update, context)
         return
     
-    # Add welcome bonus for new users
-    if user.id not in user_balances:
+    # Handle new users
+    if not is_existing_user:
         user_balances[user.id] = WELCOME_BONUS  # Welcome bonus
         referrals[user.id] = set()
         await update.message.reply_text(
             f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+        )
+    else:
+        # Welcome back message for existing users
+        await update.message.reply_text(
+            f"👋 Welcome back {user.first_name}!\n"
+            "You've been successfully verified. Here's your dashboard:"
         )
     
     # Check for daily sign-in bonus
@@ -222,6 +235,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})"
         )
 
+    # Show dashboard
+    balance = user_balances.get(user.id, 0)
+    ref_count = len(referrals.get(user.id, set()))
+    
     keyboard = [
         [InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
         [InlineKeyboardButton("💰 My Balance", callback_data='balance')],
@@ -231,16 +248,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        f"Welcome to the Referral Bot! 🚀\n"
-        f"Earn money by referring friends.\n"
-        f"• Get {WELCOME_BONUS} points welcome bonus (₦{WELCOME_BONUS})\n"
-        f"• Get {REFERRAL_BONUS} points per verified referral (₦{REFERRAL_BONUS})\n"
-        f"• Get {DAILY_BONUS} points daily sign-in bonus (₦{DAILY_BONUS})\n"
-        f"• Minimum withdrawal: ₦{MIN_WITHDRAWAL}\n"
-        f"Choose an option below:",
-        reply_markup=reply_markup
+    dashboard_text = (
+        f"🎯 Quick Stats:\n"
+        f"• Balance: {balance} points (₦{balance})\n"
+        f"• Total Referrals: {ref_count}\n"
+        f"• Earnings per referral: {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})\n"
+        f"• Daily bonus: {DAILY_BONUS} points (₦{DAILY_BONUS})\n"
+        f"• Min. withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})\n\n"
+        "Choose an option below:"
     )
+    
+    await update.message.reply_text(dashboard_text, reply_markup=reply_markup)
 
 async def can_withdraw_today(user_id: int) -> bool:
     today = datetime.now().date()
