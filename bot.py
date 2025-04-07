@@ -23,9 +23,9 @@ BOT_USERNAME = "sub9ja_bot"
 
 # Channel and Group IDs
 CHANNEL_USERNAME = "latestinfoult"
-GROUP_USERNAME = "+aeseN6uPGikzMDM0"
+GROUP_USERNAME = "-4171256761"  # Changed to numeric ID format
 REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
-REQUIRED_GROUP = f"https://t.me/{GROUP_USERNAME}"
+REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
 # Constants
 WELCOME_BONUS = 100  # ₦100
@@ -123,11 +123,15 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
     try:
         # Check channel membership
         channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
-        # Check group membership
-        group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+        # Check group membership using numeric ID
+        group_member = await context.bot.getChatMember(chat_id=int(GROUP_USERNAME), user_id=user_id)
         
         is_verified = (channel_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR] and
                       group_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR])
+        
+        # For debugging
+        print(f"Channel status: {channel_member.status}")
+        print(f"Group status: {group_member.status}")
         
         # Check if user was previously verified and now isn't
         was_verified = user_verified_status.get(user_id, False)
@@ -645,6 +649,17 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(info_message)
 
+async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to get chat ID"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+        
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"Current chat ID: {chat_id}")
+
 def main():
     token = os.getenv('BOT_TOKEN')
     port = int(os.getenv('PORT', '8443'))
@@ -676,6 +691,7 @@ def main():
     # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("chatid", get_chat_id))  # Add new command
     application.add_handler(conv_handler)  # Move conversation handler before general callback handler
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(CommandHandler("paid", handle_paid_command))
