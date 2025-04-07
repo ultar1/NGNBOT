@@ -121,17 +121,32 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
-        # Check channel membership
-        channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
-        # Check group membership using numeric ID
-        group_member = await context.bot.getChatMember(chat_id=int(GROUP_USERNAME), user_id=user_id)
-        
-        is_verified = (channel_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR] and
-                      group_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR])
-        
         # For debugging
-        print(f"Channel status: {channel_member.status}")
-        print(f"Group status: {group_member.status}")
+        print(f"Checking membership for user {user_id}")
+        
+        # Check channel membership
+        try:
+            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+            print(f"Channel status for user {user_id}: {channel_member.status}")
+        except Exception as e:
+            print(f"Error checking channel membership: {str(e)}")
+            return False
+            
+        # Check group membership using numeric ID
+        try:
+            # Don't convert to int since the ID is already in correct format
+            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+            print(f"Group status for user {user_id}: {group_member.status}")
+        except Exception as e:
+            print(f"Error checking group membership: {str(e)}")
+            return False
+        
+        is_verified = (
+            channel_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR] and
+            group_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        )
+        
+        print(f"Is user {user_id} verified? {is_verified}")
         
         # Check if user was previously verified and now isn't
         was_verified = user_verified_status.get(user_id, False)
@@ -167,7 +182,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             await process_pending_referral(user_id, context)
         
         return is_verified
-    except Exception:
+    except Exception as e:
+        print(f"Error in check_and_handle_membership_change: {str(e)}")
         return False
 
 check_membership = check_and_handle_membership_change
