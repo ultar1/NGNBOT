@@ -21,6 +21,7 @@ user_balances = {}
 pending_referrals = {}  # Store pending referrals until verification
 last_signin = {}  # Track last sign in date for each user
 last_withdrawal = {}  # Track last withdrawal date for each user
+user_withdrawal_state = {}  # Store withdrawal process state
 BOT_USERNAME = "sub9ja_bot"
 
 # Channel and Group IDs
@@ -31,7 +32,7 @@ REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for butto
 
 # Constants
 WELCOME_BONUS = 100  # ₦100
-REFERRAL_BONUS = 70  # ₦70
+REFERRAL_BONUS = 80  # Changed from 70 to 80
 DAILY_BONUS = 25  # ₦25
 MIN_WITHDRAWAL = 500  # ₦500 minimum withdrawal
 MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
@@ -56,19 +57,6 @@ user_verified_status = {}
 # Store coupon codes
 active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
 used_coupons = {}    # Format: {code: [user_ids]}
-
-# Auto reply messages
-AUTO_REPLIES = {
-    'hi': 'Hello! 👋 How can I help you today?',
-    'hello': 'Hi there! 👋 Nice to meet you!',
-    'hey': 'Hey! 👋 What can I do for you?',
-    'good morning': 'Good morning! ☀️ Have a great day!',
-    'good afternoon': 'Good afternoon! 🌞 Hope your day is going well!',
-    'good evening': 'Good evening! 🌙 Hope you had a great day!',
-    'how are you': "I'm doing great, thank you! How about you? 😊",
-    'thanks': "You're welcome! 😊",
-    'thank you': "You're welcome! Let me know if you need anything else! 🤗",
-}
 
 # Conversation states
 (
@@ -975,12 +963,11 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Current chat ID: {chat_id}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle normal text messages and auto-replies"""
+    """Handle normal text messages"""
     if not update.message or not update.message.text:
         return
         
     user = update.effective_user
-    message_text = update.message.text.lower().strip()
     
     # Check membership first
     is_member = await check_membership(user.id, context)
@@ -1000,14 +987,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         daily_chat_count[user.id] += 1
         user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
     
-    # Handle auto-replies
-    for trigger, response in AUTO_REPLIES.items():
-        if message_text == trigger:
-            await update.message.reply_text(response)
-            return
-            
-    # If no auto-reply matched, just let the message through
-    return
+    return  # Just let the message through without auto-reply
 
 def main():
     token = os.getenv('BOT_TOKEN')
