@@ -39,7 +39,7 @@ MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
 LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
 CHAT_REWARD = 1  # ₦1 per chat message
 MAX_DAILY_CHAT_REWARD = 50  # Maximum ₦50 from chat per day
-TASK_REWARD = 500  # Changed from 100 to 500
+TASK_REWARD = 100  # ₦100 reward for completing task
 WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
 # Store user data in memory
@@ -231,31 +231,59 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the dashboard"""
+async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
+    """Show dashboard with optional back button"""
     user = update.effective_user
     balance = user_balances.get(user.id, 0)
+    ref_count = len(referrals.get(user.id, set()))
+    daily_chats = daily_chat_count.get(user.id, 0)
+    chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
     
     keyboard = [
         [
-            InlineKeyboardButton("📝 Tasks", callback_data='tasks'),
-            InlineKeyboardButton("👥 Referral", callback_data='referral'),
-            InlineKeyboardButton("🔗 Get Link", callback_data='get_link')
+            InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
+            InlineKeyboardButton("💰 Balance", callback_data='balance')
         ],
         [
-            InlineKeyboardButton("💰 Balance", callback_data='balance'),
-            InlineKeyboardButton("💳 Withdraw", callback_data='withdraw'),
-            InlineKeyboardButton("ℹ️ Help", callback_data='help')
+            InlineKeyboardButton("🎯 Get Link", callback_data='get_link'),
+            InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')
+        ],
+        [
+            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
+            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
         ]
     ]
     
+    # Add back button if requested
+    if show_back:
+        keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = f"*Welcome to your Dashboard* 🎯\n\nYour Balance: ₦{balance:,}\n\nChoose an option below:"
-
+    
+    dashboard_text = (
+        f"🎯 Quick Stats:\n"
+        f"• Balance: {balance} points (₦{balance})\n"
+        f"• Total Referrals: {ref_count}\n"
+        f"• Earnings per referral: {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})\n"
+        f"• Daily bonus: {DAILY_BONUS} points (₦{DAILY_BONUS})\n"
+        f"• Chat earnings: ₦1 per chat\n"
+        f"• Today's chats: {daily_chats}/50 (₦{daily_chats})\n"
+        f"• Remaining chat earnings: {chats_remaining} (₦{chats_remaining})\n"
+        f"• Min. withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})\n\n"
+        "Choose an option below:"
+    )
+    
+    # Handle both message and callback query updates
     if update.callback_query:
-        await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode='Markdown')
+        await update.callback_query.message.edit_text(
+            dashboard_text,
+            reply_markup=reply_markup
+        )
     else:
-        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode='Markdown')
+        await update.message.reply_text(
+            dashboard_text,
+            reply_markup=reply_markup
+        )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -327,7 +355,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
         )
     
     # Show dashboard
-    await dashboard(update, context)
+    await show_dashboard(update, context)
 
 async def can_withdraw_today(user_id: int) -> bool:
     today = datetime.now().date()
@@ -349,7 +377,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_member:
             await query.answer("✅ Membership verified!")
             # Show dashboard after verification
-            await dashboard(update, context)
+            await show_dashboard(update, context)
         else:
             await query.answer("❌ Please join both the channel and group!")
             return
@@ -363,7 +391,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'back_to_menu':
         await query.answer("🔙 Returning to main menu...")
-        await dashboard(update, context)
+        await show_dashboard(update, context)
         return
     
     if query.data == 'my_referrals':
@@ -461,7 +489,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif query.data == 'tasks':
-        await tasks(update, context)
+        await handle_tasks_button(update, context)
         return
 
 def escape_markdown(text: str) -> str:
@@ -471,63 +499,34 @@ def escape_markdown(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     return text
 
-async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show available tasks"""
+async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tasks button click"""
+    query = update.callback_query
+    await query.answer()
+    
+    task_text = escape_markdown(
+        "📋 Available Tasks:\n\n"
+        "1️⃣ Create Content Task\n"
+        "• Create engaging content about our bot\n"
+        "• Submit using /task command\n"
+        "• Reward: ₦100\n\n"
+        "Instructions:\n"
+        "• Write about bot features\n"
+        "• Include referral benefits\n"
+        "• Make it engaging\n"
+        "• Submit using: /task your_content_here"
+    )
+    
     keyboard = [
-        [InlineKeyboardButton("📋 Submit Task", callback_data='submit_task')],
-        [InlineKeyboardButton("🔙 Back", callback_data='dashboard')]
+        [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    text = (
-        "*Available Task* 📝\n\n"
-        "Reward: ₦500\n\n"
-        "📌 *Task Requirements:*\n"
-        "1. Share our content on your social media\n"
-        "2. Take a screenshot of your post\n"
-        "3. Submit the screenshot here for verification\n\n"
-        "Note: Your reward will be credited after verification."
+    await query.message.edit_text(
+        task_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='MarkdownV2'
     )
-    
-    await update.callback_query.edit_message_text(
-        text=text,
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-async def submit_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task submission"""
-    await update.callback_query.edit_message_text(
-        "Please send the screenshot of your post as proof of completion.\n"
-        "Make sure the screenshot clearly shows the shared content.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='tasks')]])
-    )
-    context.user_data['awaiting_screenshot'] = True
-
-async def handle_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle screenshot verification"""
-    if not context.user_data.get('awaiting_screenshot'):
-        return
-    
-    user = update.effective_user
-    if update.message.photo:
-        # Reset the awaiting screenshot flag
-        context.user_data['awaiting_screenshot'] = False
-        
-        # Add reward to user's balance
-        user_balances[user.id] = user_balances.get(user.id, 0) + 500
-        
-        keyboard = [[InlineKeyboardButton("🔙 Back to Dashboard", callback_data='dashboard')]]
-        await update.message.reply_text(
-            "✅ Your task submission has been received!\n\n"
-            "₦500 has been added to your balance.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(
-            "❌ Please send a screenshot image of your post.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='tasks')]])
-        )
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission"""
@@ -766,7 +765,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     if query.data == 'back_to_menu':
         if user_id in user_withdrawal_state:
             del user_withdrawal_state[user_id]
-        await dashboard(update, context)
+        await show_dashboard(update, context)
         return ConversationHandler.END
     
     amount = int(query.data.replace('withdraw_amount_', ''))
@@ -1272,7 +1271,6 @@ def main():
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Add message handler
-    application.add_handler(MessageHandler(filters.PHOTO, handle_screenshot))  # Add photo handler for task submission
     
     # Set up webhook with proper error handling and configuration
     if webhook_url:
