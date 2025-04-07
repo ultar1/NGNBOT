@@ -1,4 +1,6 @@
 import os
+import random
+import string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters, ConversationHandler, ChatMemberHandler
 from telegram.constants import ChatMemberStatus
@@ -51,6 +53,14 @@ BANKS = [
 
 # Track verified status
 user_verified_status = {}
+
+# Store coupon codes
+active_coupons = {}  # Format: {code: amount}
+used_coupons = {}    # Format: {code: [user_ids]}
+
+def generate_coupon_code(length=8):
+    """Generate a random coupon code"""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 async def check_and_credit_daily_bonus(user_id: int) -> bool:
     today = datetime.now().date()
@@ -635,6 +645,94 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to generate a coupon code"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+    
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text("❌ Usage: /generate <amount>")
+        return
+    
+    try:
+        amount = int(context.args[0])
+        if amount <= 0:
+            await update.message.reply_text("❌ Amount must be positive!")
+            return
+        
+        code = generate_coupon_code()
+        active_coupons[code] = amount
+        used_coupons[code] = []
+        
+        await update.message.reply_text(
+            f"✅ Generated new coupon code:\n\n"
+            f"Code: `{code}`\n"
+            f"Amount: ₦{amount}\n\n"
+            f"Users can redeem this code using:\n"
+            f"/redeem {code}",
+            parse_mode='MarkdownV2'
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Please enter a valid amount!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle coupon code redemption"""
+    user = update.effective_user
+    
+    # Check if user is member of both channel and group
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+    
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "❌ Usage: /redeem <code>\n"
+            "Example: /redeem ABC123"
+        )
+        return
+    
+    code = context.args[0].upper()
+    
+    if code not in active_coupons:
+        await update.message.reply_text("❌ Invalid or expired coupon code!")
+        return
+    
+    if user.id in used_coupons[code]:
+        await update.message.reply_text("❌ You have already used this coupon code!")
+        return
+    
+    amount = active_coupons[code]
+    user_balances[user.id] = user_balances.get(user.id, 0) + amount
+    used_coupons[code].append(user.id)
+    
+    await update.message.reply_text(
+        f"🎉 Coupon code redeemed successfully!\n"
+        f"Added ₦{amount} to your balance.\n"
+        f"New balance: ₦{user_balances[user.id]}"
+    )
+    
+    # Notify admin
+    try:
+        admin_message = (
+            f"💫 Coupon Code Redeemed!\n\n"
+            f"User Information:\n"
+            f"• ID: {user.id}\n"
+            f"• Username: @{user.username if user.username else 'None'}\n"
+            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+            f"Coupon Details:\n"
+            f"• Code: {code}\n"
+            f"• Amount: ₦{amount}"
+        )
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+    except Exception as e:
+        print(f"Failed to send admin notification: {e}")
+
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
@@ -726,6 +824,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
     application.add_handler(CommandHandler("chatid", get_chat_id))  # Add new command
+    application.add_handler(CommandHandler("generate", handle_generate_command))  # Add generate command
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))     # Add redeem command
     application.add_handler(conv_handler)  # Move conversation handler before general callback handler
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(CommandHandler("paid", handle_paid_command))
