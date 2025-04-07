@@ -54,7 +54,7 @@ BANKS = [
 user_verified_status = {}
 
 # Store coupon codes
-active_coupons = {}  # Format: {code: amount}
+active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
 used_coupons = {}    # Format: {code: [user_ids]}
 
 # Auto reply messages
@@ -811,13 +811,18 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
             return
         
         code = generate_coupon_code()
-        active_coupons[code] = amount
+        expiration_time = datetime.now() + timedelta(minutes=30)
+        active_coupons[code] = {
+            'amount': amount,
+            'expires_at': expiration_time
+        }
         used_coupons[code] = []
         
         await update.message.reply_text(
             f"✅ Generated new coupon code:\n\n"
             f"Code: `{code}`\n"
-            f"Amount: ₦{amount}\n\n"
+            f"Amount: ₦{amount}\n"
+            f"Expires: {expiration_time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             f"Users can redeem this code using:\n"
             f"/redeem {code}",
             parse_mode='MarkdownV2'
@@ -847,21 +852,37 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     code = context.args[0].upper()
     
     if code not in active_coupons:
-        await update.message.reply_text("❌ Invalid or expired coupon code!")
+        await update.message.reply_text("❌ Invalid coupon code!")
+        return
+    
+    coupon_data = active_coupons[code]
+    current_time = datetime.now()
+    
+    # Check if coupon has expired
+    if current_time > coupon_data['expires_at']:
+        # Remove expired coupon
+        del active_coupons[code]
+        del used_coupons[code]
+        await update.message.reply_text("❌ This coupon code has expired!")
         return
     
     if user.id in used_coupons[code]:
         await update.message.reply_text("❌ You have already used this coupon code!")
         return
     
-    amount = active_coupons[code]
+    amount = coupon_data['amount']
     user_balances[user.id] = user_balances.get(user.id, 0) + amount
     used_coupons[code].append(user.id)
+    
+    # Calculate remaining time
+    time_remaining = coupon_data['expires_at'] - current_time
+    minutes_remaining = int(time_remaining.total_seconds() / 60)
     
     await update.message.reply_text(
         f"🎉 Coupon code redeemed successfully!\n"
         f"Added ₦{amount} to your balance.\n"
-        f"New balance: ₦{user_balances[user.id]}"
+        f"New balance: ₦{user_balances[user.id]}\n\n"
+        f"Note: This code will expire in {minutes_remaining} minutes"
     )
     
     # Notify admin
@@ -874,11 +895,25 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
             f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
             f"Coupon Details:\n"
             f"• Code: {code}\n"
-            f"• Amount: ₦{amount}"
+            f"• Amount: ₦{amount}\n"
+            f"• Expires in: {minutes_remaining} minutes"
         )
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
+
+# Add a function to clean expired coupons periodically
+async def clean_expired_coupons():
+    """Remove expired coupon codes"""
+    current_time = datetime.now()
+    expired_codes = [
+        code for code, data in active_coupons.items()
+        if current_time > data['expires_at']
+    ]
+    
+    for code in expired_codes:
+        del active_coupons[code]
+        del used_coupons[code]
 
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
