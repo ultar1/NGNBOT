@@ -465,17 +465,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_tasks_button(update, context)
         return
 
+def escape_markdown(text: str) -> str:
+    """Escape special characters for MarkdownV2"""
+    special_chars = ['_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
 async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle tasks button click"""
     query = update.callback_query
     await query.answer()
     
-    keyboard = [
-        [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
-    ]
-    
-    await query.message.edit_text(
+    task_text = escape_markdown(
         "📋 Available Tasks:\n\n"
         "1️⃣ Create Content Task\n"
         "• Create engaging content about our bot\n"
@@ -485,7 +487,16 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         "• Write about bot features\n"
         "• Include referral benefits\n"
         "• Make it engaging\n"
-        "• Submit using: /task your\\_content\\_here",
+        "• Submit using: /task your_content_here"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+    ]
+    
+    await query.message.edit_text(
+        task_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='MarkdownV2'
     )
