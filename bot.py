@@ -59,6 +59,7 @@ user_verified_status = {}
 # Store coupon codes
 active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
 used_coupons = {}    # Format: {code: [user_ids]}
+task_submissions = {}  # Store task submissions
 
 # Conversation states
 (
@@ -217,22 +218,30 @@ check_membership = check_and_handle_membership_change
 
 async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+        [
+            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+            InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
+        ],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "⚠️ You must join our channel and group to use this bot!\n\n"
-        "1. Join our channel\n"
-        "2. Join our group\n"
-        "3. Click 'Check Membership' button",
+        "🔒 Verification Required\n\n"
+        "To access Sub9ja Bot features:\n"
+        "1️⃣ Join our official channel\n"
+        "2️⃣ Join our community group\n"
+        "3️⃣ Click 'Verify Membership' button\n\n"
+        "⚡️ Benefits after verification:\n"
+        "• ₦100 Welcome bonus\n"
+        "• ₦80 per referral\n"
+        "• ₦25 daily login bonus\n"
+        "• ₦1 per chat message (max ₦50/day)\n"
+        "• Access to tasks and rewards",
         reply_markup=reply_markup
     )
 
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
-    """Show dashboard with optional back button"""
     user = update.effective_user
     balance = user_balances.get(user.id, 0)
     ref_count = len(referrals.get(user.id, set()))
@@ -254,26 +263,28 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         ]
     ]
     
-    # Add back button if requested
     if show_back:
         keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     dashboard_text = (
-        f"🎯 Quick Stats:\n"
-        f"• Balance: {balance} points (₦{balance})\n"
-        f"• Total Referrals: {ref_count}\n"
-        f"• Earnings per referral: {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})\n"
-        f"• Daily bonus: {DAILY_BONUS} points (₦{DAILY_BONUS})\n"
-        f"• Chat earnings: ₦1 per chat\n"
-        f"• Today's chats: {daily_chats}/50 (₦{daily_chats})\n"
-        f"• Remaining chat earnings: {chats_remaining} (₦{chats_remaining})\n"
-        f"• Min. withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})\n\n"
-        "Choose an option below:"
+        "🤖 Welcome to Sub9ja Bot!\n"
+        "Earn rewards through referrals, tasks & more.\n"
+        "──────────────────\n\n"
+        "👤 Your Stats:\n"
+        f"• Balance: ₦{balance}\n"
+        f"• Referrals: {ref_count} (₦{ref_count * REFERRAL_BONUS} earned)\n"
+        f"• Chat earnings: ₦{daily_chats} today ({chats_remaining} remaining)\n\n"
+        "💎 Available Rewards:\n"
+        f"• Welcome Bonus: ₦{WELCOME_BONUS}\n"
+        f"• Per Referral: ₦{REFERRAL_BONUS}\n"
+        f"• Daily Login: ₦{DAILY_BONUS}\n"
+        f"• Chat Messages: ₦1 each (max ₦{MAX_DAILY_CHAT_REWARD}/day)\n"
+        f"• Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
+        "Select an option below:"
     )
     
-    # Handle both message and callback query updates
     if update.callback_query:
         await update.callback_query.message.edit_text(
             dashboard_text,
@@ -285,77 +296,155 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             reply_markup=reply_markup
         )
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    
-    # Initialize verified status if new user
-    if user.id not in user_verified_status:
-        user_verified_status[user.id] = False
-    
-    is_existing_user = user.id in user_balances
-    
-    # Show verification menu first
-    keyboard = [
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')],
-    ]
-    
-    # Store referral info if this is a referred user
-    if context.args and len(context.args) > 0:
-        try:
-            referrer_id = int(context.args[0])
-            if referrer_id != user.id:
-                pending_referrals[user.id] = referrer_id
-        except ValueError:
-            pass
-    
-    welcome_text = (
-        f"👋 Welcome{'back' if is_existing_user else ''} to Sub9ja Bot!\n\n"
-        "📱 Earn money by:\n"
-        "• Referring friends\n"
-        "• Completing tasks\n"
-        "• Daily bonuses\n"
-        "• Chat rewards\n\n"
-        "✅ Please verify your membership to continue:"
-    )
-    
-    await update.message.reply_text(
-        welcome_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle verification button click"""
     query = update.callback_query
     user_id = query.from_user.id
     
-    await query.answer()
+    # Show checking message
+    await query.answer("🔍 Checking membership status...")
+    try:
+        await query.message.edit_text(
+            "⏳ Verifying your membership...\n"
+            "Please wait a moment."
+        )
+        
+        is_member = await check_membership(user_id, context)
+        if not is_member:
+            keyboard = [
+                [
+                    InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+                    InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
+                ],
+                [InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]
+            ]
+            await query.message.edit_text(
+                "❌ Verification Failed!\n\n"
+                "Please make sure to:\n"
+                "1. Join our channel\n"
+                "2. Join our group\n"
+                "3. Stay in both\n\n"
+                "Then click 'Try Again'",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        is_existing_user = user_id in user_balances
+        
+        if not is_existing_user:
+            # Show success animation/message
+            await query.message.edit_text(
+                "✅ Verification Successful!\n\n"
+                f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
+                "Loading your dashboard..."
+            )
+            user_balances[user_id] = WELCOME_BONUS
+            referrals[user_id] = set()
+            await asyncio.sleep(2)  # Brief pause for better UX
+        
+        # Check for daily bonus
+        daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
+        if daily_bonus_earned:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"📅 Daily Bonus!\nYou earned ₦{DAILY_BONUS} for logging in today!"
+            )
+        
+        # Show dashboard
+        await show_dashboard(update, context)
+        
+    except Exception as e:
+        print(f"Verification error: {e}")
+        await query.message.edit_text(
+            "❌ An error occurred during verification.\n"
+            "Please try again later.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]
+            ])
+        )
+
+async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
     
     # Check membership
-    is_member = await check_membership(user_id, context)
+    is_member = await check_membership(user.id, context)
     if not is_member:
         await show_join_message(update, context)
         return
     
-    is_existing_user = user_id in user_balances
-    
-    # Handle new users
-    if not is_existing_user:
-        user_balances[user_id] = WELCOME_BONUS
-        referrals[user_id] = set()
-        await query.message.edit_text(
-            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+    # Get the task content
+    if not context.args:
+        await update.message.reply_text(
+            "📝 Task Submission Guide:\n\n"
+            "1. Create engaging content about our bot\n"
+            "2. Include key features and benefits\n"
+            "3. Make it informative and attractive\n\n"
+            "Example format:\n"
+            "/task 🤖 Check out @sub9ja_bot!\n"
+            "• Earn ₦100 welcome bonus\n"
+            "• Get ₦80 per referral\n"
+            "• Daily bonuses and rewards\n"
+            "Join now: https://t.me/sub9ja_bot"
         )
+        return
     
-    # Check for daily sign-in bonus
-    daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
-    if daily_bonus_earned:
+    content = ' '.join(context.args)
+    
+    # Basic content validation
+    if len(content) < 50:
+        await update.message.reply_text(
+            "❌ Content too short!\n"
+            "Please write a more detailed message (at least 50 characters)."
+        )
+        return
+    
+    # Check if user has pending task
+    if user.id in task_submissions:
+        await update.message.reply_text(
+            "⚠️ You already have a pending task submission!\n"
+            "Please wait for admin review."
+        )
+        return
+    
+    # Store submission
+    task_submissions[user.id] = {
+        'content': content,
+        'submitted_at': datetime.now()
+    }
+    
+    # Notify admin
+    admin_message = (
+        f"📝 New Task Submission!\n\n"
+        f"From User:\n"
+        f"• ID: `{user.id}`\n"
+        f"• Username: @{user.username if user.username else 'None'}\n"
+        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+        f"Content:\n`{content}`\n\n"
+        f"Actions:\n"
+        f"/approve\\_task {user.id} - Approve and reward\n"
+        f"/reject\\_task {user.id} - Reject submission"
+    )
+    
+    try:
         await context.bot.send_message(
-            chat_id=user_id,
-            text=f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})"
+            chat_id=ADMIN_ID,
+            text=admin_message,
+            parse_mode='MarkdownV2'
         )
-    
-    # Show dashboard
-    await show_dashboard(update, context)
+        
+        # Confirm to user
+        await update.message.reply_text(
+            "✅ Task submitted successfully!\n\n"
+            "• Status: Under Review\n"
+            "• Reward: ₦100 on approval\n"
+            "• Time: Within 24 hours\n\n"
+            "You'll be notified once reviewed."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            "❌ Error submitting task. Please try again."
+        )
+        if user.id in task_submissions:
+            del task_submissions[user.id]
 
 async def can_withdraw_today(user_id: int) -> bool:
     today = datetime.now().date()
@@ -527,54 +616,6 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='MarkdownV2'
     )
-
-async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task submission"""
-    user = update.effective_user
-    
-    # Check membership
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
-        return
-    
-    # Get the task content
-    if not context.args:
-        await update.message.reply_text(
-            "❌ Please include your content with the command\\!\n"
-            "Example: /task Check out this amazing bot\\! It offers:\\.\\.\\."
-        )
-        return
-    
-    content = ' '.join(context.args)
-    
-    # Notify admin about the submission
-    admin_message = (
-        f"📝 New Task Submission\\!\n\n"
-        f"From User:\n"
-        f"• ID: `{user.id}`\n"
-        f"• Username: @{user.username if user.username else 'None'}\n"
-        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
-        f"Content:\n`{content}`\n\n"
-        f"Use /approve\\_task {user.id} to approve\n"
-        f"Use /reject\\_task {user.id} to reject"
-    )
-    
-    try:
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_message,
-            parse_mode='MarkdownV2'
-        )
-        
-        await update.message.reply_text(
-            "✅ Your task has been submitted for review\\!\n"
-            "You will receive your reward once approved\\."
-        )
-    except Exception as e:
-        await update.message.reply_text(
-            "❌ Error submitting task\\. Please ensure your content doesn't contain special characters\\."
-        )
 
 async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task approval by admin"""
