@@ -39,6 +39,7 @@ MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
 LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
 CHAT_REWARD = 1  # ₦1 per chat message
 MAX_DAILY_CHAT_REWARD = 50  # Maximum ₦50 from chat per day
+TASK_REWARD = 100  # ₦100 reward for completing task
 
 # Store user data in memory
 last_chat_reward = {}  # Track daily chat rewards
@@ -246,7 +247,10 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             InlineKeyboardButton("🎯 Get Link", callback_data='get_link'),
             InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')
         ],
-        [InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus')]
+        [
+            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
+            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
+        ]
     ]
     
     # Add back button if requested
@@ -456,6 +460,141 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         return
+
+    elif query.data == 'tasks':
+        await handle_tasks_button(update, context)
+        return
+
+async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tasks button click"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+    ]
+    
+    await query.message.edit_text(
+        "📋 Available Tasks:\n\n"
+        "1️⃣ Create Content Task\n"
+        "• Create engaging content about our bot\n"
+        "• Submit using /task command\n"
+        "• Reward: ₦100\n\n"
+        "Instructions:\n"
+        "• Write about bot features\n"
+        "• Include referral benefits\n"
+        "• Make it engaging\n"
+        "• Submit using: /task your\\_content\\_here",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='MarkdownV2'
+    )
+
+async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task submission"""
+    user = update.effective_user
+    
+    # Check membership
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+    
+    # Get the task content
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Please include your content with the command\\!\n"
+            "Example: /task Check out this amazing bot\\! It offers:\\.\\.\\."
+        )
+        return
+    
+    content = ' '.join(context.args)
+    
+    # Notify admin about the submission
+    admin_message = (
+        f"📝 New Task Submission\\!\n\n"
+        f"From User:\n"
+        f"• ID: `{user.id}`\n"
+        f"• Username: @{user.username if user.username else 'None'}\n"
+        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+        f"Content:\n`{content}`\n\n"
+        f"Use /approve\\_task {user.id} to approve\n"
+        f"Use /reject\\_task {user.id} to reject"
+    )
+    
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message,
+            parse_mode='MarkdownV2'
+        )
+        
+        await update.message.reply_text(
+            "✅ Your task has been submitted for review\\!\n"
+            "You will receive your reward once approved\\."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            "❌ Error submitting task\\. Please ensure your content doesn't contain special characters\\."
+        )
+
+async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task approval by admin"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins\\!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /approve\\_task <user\\_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        
+        # Add reward to user's balance
+        user_balances[target_user_id] = user_balances.get(target_user_id, 0) + TASK_REWARD
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=f"🎉 Your task has been approved\\!\n"
+                 f"Added ₦{TASK_REWARD} to your balance\\."
+        )
+        
+        await update.message.reply_text(f"✅ Task approved for user {target_user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task rejection by admin"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins\\!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /reject\\_task <user\\_id> [reason]")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        reason = ' '.join(context.args[1:]) if len(context.args) > 1 else "No reason provided"
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=f"❌ Your task has been rejected\\.\n"
+                 f"Reason: {reason}"
+        )
+        
+        await update.message.reply_text(f"✅ Task rejected for user {target_user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def handle_withdrawal_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1035,6 +1174,9 @@ def main():
     application.add_handler(CommandHandler("chatid", get_chat_id))  # Add new command
     application.add_handler(CommandHandler("generate", handle_generate_command))  # Add generate command
     application.add_handler(CommandHandler("redeem", handle_redeem_command))     # Add redeem command
+    application.add_handler(CommandHandler("task", handle_task_command))
+    application.add_handler(CommandHandler("approve_task", handle_approve_task))
+    application.add_handler(CommandHandler("reject_task", handle_reject_task))
     application.add_handler(withdrawal_handler)
     application.add_handler(payment_handler)  # Add the new payment handler
     application.add_handler(CallbackQueryHandler(button_handler))
