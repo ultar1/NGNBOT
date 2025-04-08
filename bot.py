@@ -1075,51 +1075,47 @@ async def clean_expired_coupons():
 
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    
-    # Check if user is member of both channel and group
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
+
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
         return
-    
-    # Get user statistics
-    balance = user_balances.get(user.id, 0)
-    ref_count = len(referrals.get(user.id, set()))
-    total_earnings = ref_count * REFERRAL_BONUS
-    last_signin_date = last_signin.get(user.id, None)
-    
-    # Calculate next daily bonus time
-    next_bonus = "Available Now! 🎁"
-    if last_signin_date and last_signin_date == datetime.now().date():
-        tomorrow = datetime.now() + timedelta(days=1)
-        tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-        time_until = tomorrow - datetime.now()
-        hours = int(time_until.total_seconds() // 3600)
-        minutes = int((time_until.total_seconds() % 3600) // 60)
-        next_bonus = f"in {hours}h {minutes}m ⏳"
-    
-    info_message = (
-        f"👤 User Information\n"
-        f"───────────────\n"
-        f"ID: {user.id}\n"
-        f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
-        f"Username: @{user.username if user.username else 'None'}\n\n"
-        
-        f"💰 Balance & Earnings\n"
-        f"───────────────\n"
-        f"Current Balance: {balance} points (₦{balance})\n"
-        f"Total Referrals: {ref_count}\n"
-        f"Referral Earnings: {total_earnings} points (₦{total_earnings})\n\n"
-        
-        f"📊 Statistics\n"
-        f"───────────────\n"
-        f"Welcome Bonus: {WELCOME_BONUS} points (₦{WELCOME_BONUS})\n"
-        f"Daily Bonus: {DAILY_BONUS} points (₦{DAILY_BONUS})\n"
-        f"Next Daily Bonus: {next_bonus}\n"
-        f"Min. Withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})"
-    )
-    
-    await update.message.reply_text(info_message)
+
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text("❌ Usage: /info <user_id>")
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+        balance = user_balances.get(target_user_id, 0)
+        ref_count = len(referrals.get(target_user_id, set()))
+        total_earnings = ref_count * REFERRAL_BONUS
+        last_signin_date = last_signin.get(target_user_id, None)
+
+        next_bonus = "Available Now! 🎁"
+        if last_signin_date and last_signin_date == datetime.now().date():
+            tomorrow = datetime.now() + timedelta(days=1)
+            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+            time_until = tomorrow - datetime.now()
+            hours = int(time_until.total_seconds() // 3600)
+            minutes = int((time_until.total_seconds() % 3600) // 60)
+            next_bonus = f"in {hours}h {minutes}m ⏳"
+
+        info_message = (
+            f"👤 User Information\n"
+            f"───────────────\n"
+            f"ID: {target_user_id}\n"
+            f"Balance: {balance} points (₦{balance})\n"
+            f"Total Referrals: {ref_count}\n"
+            f"Referral Earnings: {total_earnings} points (₦{total_earnings})\n"
+            f"Next Daily Bonus: {next_bonus}\n"
+            f"Min. Withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})"
+        )
+
+        await update.message.reply_text(info_message)
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command to get chat ID"""
@@ -1131,6 +1127,12 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     chat_id = update.effective_chat.id
     await update.message.reply_text(f"Current chat ID: {chat_id}")
+
+async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str):
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=message)
+    except Exception as e:
+        print(f"Failed to send notification: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle normal text messages"""
