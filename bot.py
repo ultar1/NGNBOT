@@ -246,7 +246,6 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             InlineKeyboardButton("💰 Balance", callback_data='balance')
         ],
         [
-            InlineKeyboardButton("🎯 Get Link", callback_data='get_link'),
             InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')
         ],
         [
@@ -288,6 +287,27 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             dashboard_text,
             reply_markup=reply_markup
         )
+
+async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    ref_count = len(referrals.get(user.id, set()))
+    link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
+
+    keyboard = [
+        [InlineKeyboardButton("🎯 Get Link", callback_data='get_link')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"You have {ref_count} referrals! 👥\n"
+        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
+        f"Here's your referral link: {link}\n"
+        f"Share this with your friends to earn points! 🎯\n"
+        f"You'll get {REFERRAL_BONUS} points (₦{REFERRAL_BONUS}) for each friend who joins!",
+        reply_markup=reply_markup
+    )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -399,15 +419,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if query.data == 'my_referrals':
-        ref_count = len(referrals.get(user_id, set()))
-        await query.answer()
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await query.message.edit_text(
-            f"You have {ref_count} referrals! 👥\n"
-            f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
+        await show_referral_menu(update, context)
+        return
+
     elif query.data == 'balance':
         balance = user_balances.get(user_id, 0)
         await query.answer()
@@ -415,17 +429,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(
             f"Your current balance: {balance} points (₦{balance}) 💰\n"
             f"You can withdraw once you reach {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})!",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    elif query.data == 'get_link':
-        link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        await query.answer()
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await query.message.edit_text(
-            f"Here's your referral link: {link}\n"
-            f"Share this with your friends to earn points! 🎯\n"
-            f"You'll get {REFERRAL_BONUS} points (₦{REFERRAL_BONUS}) for each friend who joins!",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
