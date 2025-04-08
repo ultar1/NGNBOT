@@ -115,6 +115,25 @@ async def verify_captcha(message: str, user_id: int) -> bool:
         
     return False
 
+async def handle_new_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle new CAPTCHA generation button"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    # Generate new CAPTCHA
+    captcha_code = generate_captcha()
+    user_captcha[user_id] = {'code': captcha_code, 'attempts': 0}
+    
+    keyboard = [[InlineKeyboardButton("🔄 Generate New CAPTCHA", callback_data='new_captcha')]]
+    
+    await query.message.edit_text(
+        f"🔒 Security Check\n\n"
+        f"Please enter this code: {captcha_code}\n\n"
+        f"Type the code and send it as a message.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    await query.answer("New CAPTCHA generated!")
+
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -489,6 +508,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_dashboard(update, context)
         else:
             await query.answer("❌ Please join both the channel and group!")
+        return
+
+    if query.data == 'new_captcha':
+        await handle_new_captcha(update, context)
         return
 
     is_member = await check_membership(user_id, context)
@@ -1384,4 +1407,6 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(info_message)
     except ValueError:
-        await update.message.reply_text("❌
+        await update.message.reply_text("❌ Invalid user ID!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
