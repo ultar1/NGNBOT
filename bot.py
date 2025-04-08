@@ -1173,12 +1173,12 @@ def main():
     webhook_url = os.getenv('WEBHOOK_URL')
     heroku_app_name = os.getenv('HEROKU_APP_NAME')
     secret = os.getenv('WEBHOOK_SECRET', 'your-256-bit-secret-token')  # Add secret token env var
-    
+
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
-    
+
     application = Application.builder().token(token).build()
-    
+
     # Create conversation handler for withdrawal process
     withdrawal_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
@@ -1195,7 +1195,7 @@ def main():
         name="withdrawal_conversation",
         persistent=False
     )
-    
+
     # Create conversation handler for payment screenshot
     payment_handler = ConversationHandler(
         entry_points=[CommandHandler("paid", handle_paid_command)],
@@ -1206,24 +1206,24 @@ def main():
         name="payment_screenshot_conversation",
         persistent=False
     )
-    
+
     # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
-    application.add_handler(CommandHandler("chatid", get_chat_id))  # Add new command
-    application.add_handler(CommandHandler("generate", handle_generate_command))  # Add generate command
-    application.add_handler(CommandHandler("redeem", handle_redeem_command))     # Add redeem command
+    application.add_handler(CommandHandler("chatid", get_chat_id))
+    application.add_handler(CommandHandler("generate", handle_generate_command))
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))
     application.add_handler(CommandHandler("task", handle_task_command))
     application.add_handler(CommandHandler("approve_task", handle_approve_task))
     application.add_handler(CommandHandler("reject_task", handle_reject_task))
     application.add_handler(withdrawal_handler)
-    application.add_handler(payment_handler)  # Add the new payment handler
+    application.add_handler(payment_handler)
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Add message handler
-    
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     # Set up webhook with proper error handling and configuration
     if webhook_url:
         # Use provided webhook URL if available
