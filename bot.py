@@ -1535,6 +1535,83 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def notify_admin_verified_user(user_id: int, referrer_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Notify admin about new verified user"""
+    try:
+        user = await context.bot.get_chat(user_id)
+        referrer = await context.bot.get_chat(referrer_id) if referrer_id else None
+        
+        admin_message = (
+            "🆕 New User Verified!\n\n"
+            f"👤 New User:\n"
+            f"• ID: {user_id}\n"
+            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
+            f"• Username: @{user.username if user.username else 'None'}\n\n"
+        )
+        
+        if referrer:
+            admin_message += (
+                f"👥 Referred By:\n"
+                f"• ID: {referrer_id}\n"
+                f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
+                f"• Username: @{referrer.username if referrer.username else 'None'}\n"
+                f"• Total Referrals: {len(referrals.get(referrer_id, set()))}"
+            )
+        else:
+            admin_message += "Direct Join (No Referrer)"
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message
+        )
+    except Exception as e:
+        print(f"Failed to send admin notification: {e}")
+
+async def handle_verification_complete(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    """Handle user verification completion"""
+    if user_id not in user_balances:
+        # New user - add welcome bonus
+        user_balances[user_id] = WELCOME_BONUS
+        referrals[user_id] = set()
+        
+        # Process referral if exists
+        referrer_id = pending_referrals.get(user_id)
+        if referrer_id and referrer_id != user_id:
+            # Credit referral bonus
+            referrals[referrer_id] = referrals.get(referrer_id, set())
+            referrals[referrer_id].add(user_id)
+            user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
+            
+            # Notify referrer
+            try:
+                await context.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
+                )
+            except Exception as e:
+                print(f"Failed to notify referrer: {e}")
+            
+            # Clean up
+            del pending_referrals[user_id]
+            
+            # Notify admin about verified user
+            await notify_admin_verified_user(user_id, referrer_id, context)
+        else:
+            # Notify admin about direct join
+            await notify_admin_verified_user(user_id, None, context)
+        
+        # Send welcome message
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+            )
+        except Exception as e:
+            print(f"Failed to send welcome message: {e}")
+    
+    # Show dashboard
+    await show_dashboard(update, context)
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
