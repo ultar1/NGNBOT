@@ -22,7 +22,7 @@ pending_referrals = {}  # Store pending referrals until verification
 last_signin = {}  # Track last sign in date for each user
 last_withdrawal = {}  # Track last withdrawal date for each user
 user_withdrawal_state = {}  # Store withdrawal process state
-BOT_USERNAME = "sub9ja_bot"
+BOT_USERNAME = "pay9ja_bot"
 
 # Channel and Group IDs
 CHANNEL_USERNAME = "latestinfoult"
@@ -400,13 +400,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_member = await check_membership(user_id, context)
         if is_member:
             await query.answer("✅ Membership verified!")
-            # Show dashboard after verification
             await show_dashboard(update, context)
         else:
             await query.answer("❌ Please join both the channel and group!")
-            return
+        return
 
-    # Check membership for all other actions
     is_member = await check_membership(user_id, context)
     if not is_member:
         await query.answer("❌ Please join our channel and group first!")
@@ -417,49 +415,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("🔙 Returning to main menu...")
         await show_dashboard(update, context)
         return
-    
+
     if query.data == 'my_referrals':
         await show_referral_menu(update, context)
-        return
-
-    elif query.data == 'balance':
-        balance = user_balances.get(user_id, 0)
-        await query.answer()
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await query.message.edit_text(
-            f"Your current balance: {balance} points (₦{balance}) 💰\n"
-            f"You can withdraw once you reach {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})!",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    elif query.data == 'withdraw':
-        await handle_withdrawal_start(update, context)
-        return ACCOUNT_NUMBER
-
-    elif query.data == 'daily_bonus':
-        daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        if daily_bonus_earned:
-            await query.answer(f"✅ You earned {DAILY_BONUS} points (₦{DAILY_BONUS})!")
-            await query.message.edit_text(
-                f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            await query.answer("❌ You already claimed your daily bonus today!")
-            await query.message.edit_text(
-                "You've already claimed your daily bonus today.\nCome back tomorrow! 📅",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        return
-
-    elif query.data == 'tasks':
-        await handle_tasks_button(update, context)
         return
 
     elif query.data == 'top_referrals':
         await show_top_referrals(update, context)
         return
+
+    elif query.data == 'withdraw':
+        await handle_withdrawal_start(update, context)
+        return
+
+    elif query.data == 'submit_task':
+        await query.answer("📝 Submit your content task using the /task command.")
+        return
+
+    await query.answer("❌ Unknown action.")
 
 def escape_markdown(text: str) -> str:
     """Escape special characters for MarkdownV2"""
