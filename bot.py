@@ -459,25 +459,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "❌ Too many failed attempts. Please start over with /start"
                 )
             return
-        
+
+        # After successful CAPTCHA, show join message
         await update.message.reply_text("✅ CAPTCHA verified successfully!")
+        await show_join_message(update, context)
+        return
 
     # Initialize verified status if new user
     if user.id not in user_verified_status:
         user_verified_status[user.id] = False
 
     is_existing_user = user.id in user_balances
-
-    # Check membership
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
-        return
-
-    # Show verification menu first
-    keyboard = [
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')],
-    ]
 
     # Store referral info if this is a referred user
     if context.args and len(context.args) > 0:
@@ -488,20 +480,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             pass
 
-    welcome_text = (
-        f"👋 Welcome{' back' if is_existing_user else ''} to Sub9ja Bot!\n\n"
-        "📱 Earn money by:\n"
-        "• Referring friends\n"
-        "• Completing tasks\n"
-        "• Daily bonuses\n"
-        "• Chat rewards\n\n"
-        "✅ Please verify your membership to continue:"
-    )
+    # Check membership status
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
 
-    await update.message.reply_text(
-        welcome_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    # Handle new users after verification
+    if not is_existing_user:
+        print(f"Adding welcome bonus of {WELCOME_BONUS} to user {user.id}")  # Debug log
+        user_balances[user.id] = WELCOME_BONUS
+        referrals[user.id] = set()
+        await update.message.reply_text(
+            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+        )
+    
+    # Show dashboard for verified users
+    await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
