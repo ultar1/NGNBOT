@@ -232,6 +232,7 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+# Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
     """Show dashboard with optional back button"""
     user = update.effective_user
@@ -276,14 +277,16 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         "Choose an option below:"
     )
     
-    # Handle both message and callback query updates
+    # Use callback_query.message if update.message is None
+    target_message = update.message or update.callback_query.message
+
     if update.callback_query:
-        await update.callback_query.message.edit_text(
+        await target_message.edit_text(
             dashboard_text,
             reply_markup=reply_markup
         )
     else:
-        await update.message.reply_text(
+        await target_message.reply_text(
             dashboard_text,
             reply_markup=reply_markup
         )
@@ -397,6 +400,7 @@ async def can_withdraw_today(user_id: int) -> bool:
     last_date = last_withdrawal.get(user_id)
     return last_date is None or last_date < today
 
+# Ensure all button handlers use callback_query.message where necessary
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
