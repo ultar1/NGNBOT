@@ -295,24 +295,16 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ref_count = len(referrals.get(user.id, set()))
-    link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
 
     keyboard = [
-        [InlineKeyboardButton("🎯 Get Link", callback_data='get_link')],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Use callback_query.message if update.message is None
-    target_message = update.message or update.callback_query.message
-
-    await target_message.reply_text(
+    await update.message.reply_text(
         f"You have {ref_count} referrals! 👥\n"
-        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Here's your referral link: {link}\n"
-        f"Share this with your friends to earn points! 🎯\n"
-        f"You'll get {REFERRAL_BONUS} points (₦{REFERRAL_BONUS}) for each friend who joins!",
+        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})",
         reply_markup=reply_markup
     )
 
@@ -513,51 +505,49 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task submission"""
     user = update.effective_user
-    
+
     # Check membership
     is_member = await check_membership(user.id, context)
     if not is_member:
         await show_join_message(update, context)
         return
-    
+
     # Get the task content
     if not context.args:
         await update.message.reply_text(
-            "❌ Please include your content with the command\\!\n"
-            "Example: /task Check out this amazing bot\\! It offers:\\.\\.\\."
+            "❌ Please include your content with the command!\n"
+            "Example: /task Check out this amazing bot! It offers..."
         )
         return
-    
+
     content = ' '.join(context.args)
-    
+
     # Notify admin about the submission
     admin_message = (
-        f"📝 New Task Submission\\!\n\n"
+        f"📝 New Task Submission!\n\n"
         f"From User:\n"
-        f"• ID: `{user.id}`\n"
+        f"• ID: {user.id}\n"
         f"• Username: @{user.username if user.username else 'None'}\n"
         f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
-        f"Content:\n`{content}`\n\n"
-        f"Use /approve\\_task {user.id} to approve\n"
-        f"Use /reject\\_task {user.id} to reject"
+        f"Content:\n{content}\n\n"
+        f"Use /approve_task {user.id} to approve\n"
+        f"Use /reject_task {user.id} to reject"
     )
-    
+
     try:
         await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=admin_message,
-            parse_mode='MarkdownV2'
+            text=admin_message
         )
-        
+
         await update.message.reply_text(
-            "✅ Your task has been submitted for review\\!\n"
-            "You will receive your reward once approved\\."
+            "✅ Your task has been submitted for review!\n"
+            "You will receive your reward once approved."
         )
     except Exception as e:
         await update.message.reply_text(
-            "❌ Error submitting task\\. Please ensure your content doesn't contain special characters\\."
+            "❌ Error submitting task. Please ensure your content doesn't contain special characters."
         )
 
 async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
