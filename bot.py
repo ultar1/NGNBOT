@@ -1495,7 +1495,7 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    heroku_app_name = os.getenv("HEROKU_APP_NAME", "sub9ja")
+    heroku_app_name = os.getenv("HEROKU_APP_NAME", "ngnbot-976310dc7194")  # Update with correct app name
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
@@ -1505,7 +1505,10 @@ def main():
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Define withdrawal handler first
+    # Define handlers first
+    print("Setting up handlers...")
+    
+    # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$")
@@ -1576,11 +1579,11 @@ def main():
     print("Setting up webhook...")
 
     try:
-        # Set up webhook
+        # Set up webhook with correct domain
         webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
         print(f"Setting webhook to: {webhook_url}")
         
-        # Start the webhook
+        # Start the webhook with proper configuration
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
@@ -1590,8 +1593,10 @@ def main():
                 "message",
                 "callback_query",
                 "chat_member"
-            ]
+            ],
+            drop_pending_updates=True  # Add this to clear any pending updates
         )
+        print("Webhook setup complete!")
     except Exception as e:
         print(f"Error starting bot: {str(e)}")
         raise e
