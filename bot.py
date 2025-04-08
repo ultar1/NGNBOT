@@ -309,20 +309,27 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
+# Update the start command to show channel and group buttons if the user isn't in them
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    
+
     # Initialize verified status if new user
     if user.id not in user_verified_status:
         user_verified_status[user.id] = False
-    
+
     is_existing_user = user.id in user_balances
-    
+
+    # Check membership
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+
     # Show verification menu first
     keyboard = [
         [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')],
     ]
-    
+
     # Store referral info if this is a referred user
     if context.args and len(context.args) > 0:
         try:
@@ -331,9 +338,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pending_referrals[user.id] = referrer_id
         except ValueError:
             pass
-    
+
     welcome_text = (
-        f"👋 Welcome{'back' if is_existing_user else ''} to Sub9ja Bot!\n\n"
+        f"👋 Welcome{' back' if is_existing_user else ''} to Pay9ja Bot!\n\n"
         "📱 Earn money by:\n"
         "• Referring friends\n"
         "• Completing tasks\n"
@@ -341,7 +348,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Chat rewards\n\n"
         "✅ Please verify your membership to continue:"
     )
-    
+
     await update.message.reply_text(
         welcome_text,
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -386,8 +393,6 @@ async def can_withdraw_today(user_id: int) -> bool:
     last_date = last_withdrawal.get(user_id)
     return last_date is None or last_date < today
 
-WITHDRAWAL_AMOUNT = 3  # Add this near other conversation states
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -430,6 +435,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'submit_task':
         await query.answer("📝 Submit your content task using the /task command.")
+        return
+
+    elif query.data.startswith('withdraw_amount_'):
+        await handle_amount_selection(update, context)
+        return
+
+    elif query.data.startswith('bank_'):
+        await handle_bank_selection(update, context)
         return
 
     await query.answer("❌ Unknown action.")
@@ -632,13 +645,6 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     await query.message.reply_text(
         "Please enter your Account Name (as shown in your bank):"
-    )
-    return ACCOUNT_NAME
-
-async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    account_name = update.message.text.strip()
-
     if len(account_name) < 3:
         await update.message.reply_text(
             "❌ Please enter a valid account name!"
