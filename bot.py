@@ -1613,6 +1613,9 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
             # Notify admin about direct join
             await notify_admin_verified_user(user_id, None, context)
             
+        # Mark user as verified
+        user_verified_status[user_id] = True
+        
         # Clean up pending referral
         if user_id in pending_referrals:
             del pending_referrals[user_id]
