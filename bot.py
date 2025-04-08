@@ -4,6 +4,7 @@ import string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters, ConversationHandler, ChatMemberHandler
 from telegram.constants import ChatMemberStatus
+from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
@@ -960,7 +961,6 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         current_balance = user_balances.get(target_user_id, 0)
         if current_balance < amount:
-            await update.message.reply_text(
                 f"❌ User only has {current_balance} points, cannot deduct {amount} points!"
             )
             return
@@ -1581,3 +1581,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+``` 
