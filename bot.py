@@ -22,7 +22,7 @@ pending_referrals = {}  # Store pending referrals until verification
 last_signin = {}  # Track last sign in date for each user
 last_withdrawal = {}  # Track last withdrawal date for each user
 user_withdrawal_state = {}  # Store withdrawal process state
-auser_bank_info = {}  # Store user bank details
+user_bank_info = {}  # Store user bank details
 BOT_USERNAME = "pay9ja_bot"
 
 # Channel and Group IDs
@@ -473,6 +473,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    elif query.data == 'tasks':
+        await handle_tasks_button(update, context)
+        return
+
     await query.answer("❌ Unknown action.")
 
 def escape_markdown(text: str) -> str:
@@ -620,7 +624,21 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     user_id = query.from_user.id
     
-    # Check if user is eligible to withdraw
+    # Check if user has saved bank details
+    if user_id in user_bank_info:
+        saved_info = user_bank_info[user_id]
+        keyboard = [
+            [InlineKeyboardButton("✅ Use Saved Account", callback_data='use_saved_account')],
+            [InlineKeyboardButton("📝 New Account", callback_data='new_account')],
+            [InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]
+        ]
+        await query.message.edit_text(
+            f"Found saved bank details:\nBank: {saved_info['bank']}\nAccount: {saved_info['account_number']}\n\nWould you like to use this account?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ACCOUNT_NUMBER
+    
+    # No saved details, proceed with normal flow
     balance = user_balances.get(user_id, 0)
     if balance < MIN_WITHDRAWAL:
         await query.message.edit_text(
@@ -629,9 +647,6 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ConversationHandler.END
-    
-    # Store initial withdrawal data
-    context.user_data['withdrawal'] = {}
     
     await query.message.edit_text(
         "Please enter your account number (10 digits):",
@@ -741,6 +756,13 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     
     amount = int(query.data.replace('amount_', ''))
     withdrawal_data = context.user_data.get('withdrawal', {})
+    
+    # Save bank info for future use
+    user_bank_info[user_id] = {
+        'account_number': withdrawal_data['account_number'],
+        'bank': withdrawal_data['bank'],
+        'account_name': withdrawal_data['account_name']
+    }
     
     # Verify amount
     balance = user_balances.get(user_id, 0)
