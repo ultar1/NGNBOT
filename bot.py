@@ -503,7 +503,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     user_id = query.from_user.id
     
-    await query.answer()
+    await query.answer("Checking membership status...")
     
     # Check membership
     is_member = await check_membership(user_id, context)
@@ -511,26 +511,12 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
         await show_join_message(update, context)
         return
     
-    is_existing_user = user_id in user_balances
+    # Mark user as verified
+    user_verified_status[user_id] = True
     
-    # Handle new users
-    if not is_existing_user:
-        user_balances[user_id] = WELCOME_BONUS
-        referrals[user_id] = set()
-        await query.message.edit_text(
-            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-        )
-    
-    # Check for daily sign-in bonus
-    daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
-    if daily_bonus_earned:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"📅 Daily Sign-in Bonus!\nYou've earned {DAILY_BONUS} points (₦{DAILY_BONUS})"
-        )
-    
-    # Show dashboard
-    await show_dashboard(update, context)
+    # Handle verification completion (includes welcome bonus and referral processing)
+    await handle_verification_complete(update, context, user_id)
+    return
 
 async def can_withdraw_today(user_id: int) -> bool:
     today = datetime.now().date()
