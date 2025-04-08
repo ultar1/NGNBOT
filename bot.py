@@ -869,9 +869,17 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
         )
         return ConversationHandler.END
     
-    # Process withdrawal
+    # Process withdrawal and store withdrawal state
     user_balances[user_id] = balance - amount
     last_withdrawal[user_id] = datetime.now().date()
+    
+    # Store withdrawal state for potential refund
+    user_withdrawal_state[user_id] = {
+        'amount': amount,
+        'account_number': withdrawal_data['account_number'],
+        'bank': withdrawal_data['bank'],
+        'account_name': withdrawal_data['account_name']
+    }
     
     # Save amount and notify admin
     withdrawal_data['amount'] = amount
@@ -1024,6 +1032,7 @@ async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAUL
     return ConversationHandler.END
 
 async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle withdrawal rejection by admin"""
     user = update.effective_user
     
     if not await is_admin(user.id):
@@ -1038,16 +1047,33 @@ async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TY
         target_user_id = int(context.args[0])
         reason = " ".join(context.args[1:]) if len(context.args) > 1 else "No reason provided"
         
-        # Refund the points
+        # Refund the points if there's a pending withdrawal
         if target_user_id in user_withdrawal_state:
-            refund_amount = user_withdrawal_state[target_user_id].get('amount', 0)
+            withdrawal_info = user_withdrawal_state[target_user_id]
+            refund_amount = withdrawal_info['amount']
+            
+            # Refund the points
             user_balances[target_user_id] = user_balances.get(target_user_id, 0) + refund_amount
+            
+            # Notify user about rejection and refund
             await context.bot.send_message(
                 chat_id=target_user_id,
-                text=f"❌ Your withdrawal has been rejected.\nReason: {reason}\nYour points have been refunded."
+                text=(f"❌ Your withdrawal of ₦{refund_amount} has been rejected.\n"
+                      f"Reason: {reason}\n\n"
+                      f"✅ Your {refund_amount} points have been refunded to your balance.\n"
+                      f"New balance: ₦{user_balances[target_user_id]}")
             )
-        
-        await update.message.reply_text(f"✅ Rejected withdrawal for user {target_user_id}")
+            
+            # Clear withdrawal state
+            del user_withdrawal_state[target_user_id]
+            
+            await update.message.reply_text(
+                f"✅ Rejected withdrawal for user {target_user_id}\n"
+                f"Refunded ₦{refund_amount}"
+            )
+        else:
+            await update.message.reply_text("❌ No pending withdrawal found for this user!")
+            
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
@@ -1358,165 +1384,4 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(info_message)
     except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to get chat ID"""
-    user = update.effective_user
-    
-    if not await is_admin(user.id):
-        await update.message.reply_text("❌ This command is only for admins!")
-        return
-        
-    chat_id = update.effective_chat.id
-    await update.message.reply_text(f"Current chat ID: {chat_id}")
-
-async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str):
-    try:
-        await context.bot.send_message(chat_id=chat_id, text=message)
-    except Exception as e:
-        print(f"Failed to send notification: {e}")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle normal text messages"""
-    if not update.message or not update.message.text:
-        return
-        
-    user = update.effective_user
-    
-    # Check membership first
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
-        return
-    
-    # Process chat reward
-    today = datetime.now().date()
-    if user.id not in last_chat_reward or last_chat_reward[user.id] != today:
-        # Reset daily counts if it's a new day
-        last_chat_reward[user.id] = today
-        daily_chat_count[user.id] = 0
-    
-    # Check if user hasn't reached daily chat reward limit
-    if daily_chat_count[user.id] < MAX_DAILY_CHAT_REWARD:
-        daily_chat_count[user.id] += 1
-        user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
-    
-    return  # Just let the message through without auto-reply
-
-def main():
-    token = os.getenv('BOT_TOKEN')
-    port = int(os.getenv('PORT', '8443'))
-    webhook_url = os.getenv('WEBHOOK_URL')
-    heroku_app_name = os.getenv('HEROKU_APP_NAME')
-    secret = os.getenv('WEBHOOK_SECRET', 'your-256-bit-secret-token')  # Add secret token env var
-
-    if not token:
-        raise ValueError("No BOT_TOKEN found in environment variables")
-
-    application = Application.builder().token(token).build()
-
-    # Update withdrawal conversation handler registration in main()
-    withdrawal_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(handle_withdrawal_start, pattern='^withdraw$')
-        ],
-        states={
-            ACCOUNT_NUMBER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ],
-            BANK_NAME: [
-                CallbackQueryHandler(handle_bank_name, pattern='^bank_'),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ],
-            ACCOUNT_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ],
-            AMOUNT_SELECTION: [
-                CallbackQueryHandler(handle_amount_selection, pattern='^amount_'),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ]
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
-            CallbackQueryHandler(button_handler, pattern='^back_to_menu$'),
-            CommandHandler('start', start)
-        ],
-        allow_reentry=True,
-        name="withdrawal_conversation",
-        persistent=False
-    )
-
-    # Create conversation handler for payment screenshot
-    payment_handler = ConversationHandler(
-        entry_points=[CommandHandler("paid", handle_paid_command)],
-        states={
-            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
-        fallbacks=[CommandHandler('start', start)],
-        name="payment_screenshot_conversation",
-        persistent=False
-    )
-
-    # Update the handler order in main()
-    # Add the withdrawal handler first to ensure it captures messages properly
-    application.add_handler(withdrawal_handler)
-    
-    # Then add other handlers
-    application.add_handler(payment_handler)
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("info", get_user_info))
-    application.add_handler(CommandHandler("chatid", get_chat_id))
-    application.add_handler(CommandHandler("generate", handle_generate_command))
-    application.add_handler(CommandHandler("redeem", handle_redeem_command))
-    application.add_handler(CommandHandler("task", handle_task_command))
-    application.add_handler(CommandHandler("approve_task", handle_approve_task))
-    application.add_handler(CommandHandler("reject_task", handle_reject_task))
-    application.add_handler(CommandHandler("reject", handle_reject_command))
-    application.add_handler(CommandHandler("add", handle_add_command))
-    application.add_handler(CommandHandler("deduct", handle_deduct_command))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Set up webhook with proper error handling and configuration
-    if webhook_url:
-        # Use provided webhook URL if available
-        webhook_path = webhook_url.split('/')[-1]
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=webhook_path,
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-            secret_token=secret,  # Use proper secret token
-            allowed_updates=[
-                "message",
-                "callback_query",
-                "chat_member"
-            ]
-        )
-    elif heroku_app_name:
-        # Fallback to constructing URL from Heroku app name
-        webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=token,
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-            secret_token=secret,  # Use proper secret token
-            allowed_updates=[
-                "message",
-                "callback_query",
-                "chat_member"
-            ]
-        )
-    else:
-        raise ValueError("Either WEBHOOK_URL or HEROKU_APP_NAME must be set in environment variables")
-
-if __name__ == '__main__':
-    main()
+        await update.message.reply_text("❌
