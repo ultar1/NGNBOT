@@ -844,8 +844,7 @@ async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TY
             refund_amount = user_withdrawal_state[target_user_id].get('amount', 0)
             user_balances[target_user_id] = user_balances.get(target_user_id, 0) + refund_amount
             chat_id=target_user_id,
-            text=f"❌ Your withdrawal has been rejected.\nReason: {reason}\nYour points have been refunded."
-        )
+            text=f"❌ Your withdrawal has been rejected.\nReason: {reason}\nYour points have been refunded.")
         
         await update.message.reply_text(f"✅ Rejected withdrawal for user {target_user_id}")
     except Exception as e:
