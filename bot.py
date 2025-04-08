@@ -22,6 +22,7 @@ pending_referrals = {}  # Store pending referrals until verification
 last_signin = {}  # Track last sign in date for each user
 last_withdrawal = {}  # Track last withdrawal date for each user
 user_withdrawal_state = {}  # Store withdrawal process state
+auser_bank_info = {}  # Store user bank details
 BOT_USERNAME = "pay9ja_bot"
 
 # Channel and Group IDs
