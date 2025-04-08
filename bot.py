@@ -32,6 +32,7 @@ GROUP_USERNAME = "-1002250504941"  # Updated with correct group ID
 REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
+# Constants
 WELCOME_BONUS = 100  # ₦100
 REFERRAL_BONUS = 80  # Changed from 70 to 80
 DAILY_BONUS = 25  # ₦25
@@ -419,7 +420,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     welcome_text = (
-        f"👋 Welcome{' back' if is_existing_user else ''} to Pay9ja Bot!\n\n"
+        f"👋 Welcome{' back' if is_existing_user else ''} to Sub9ja Bot!\n\n"
         "📱 Earn money by:\n"
         "• Referring friends\n"
         "• Completing tasks\n"
@@ -753,8 +754,17 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return ACCOUNT_NUMBER
     
+    # Check for uniqueness
+    if account_number in account_number_to_user and account_number_to_user[account_number] != user_id:
+        await update.message.reply_text(
+            "❌ This account number is already in use by another user!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
+        )
+        return ACCOUNT_NUMBER
+    
     # Save account number
     context.user_data['withdrawal']['account_number'] = account_number
+    account_number_to_user[account_number] = user_id
     
     # Create bank selection keyboard
     keyboard = []
