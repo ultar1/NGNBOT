@@ -1254,12 +1254,6 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle normal text messages"""
-        
-    chat_id = update.effective_chat.id
-    await update.message.reply_text(f"Current chat ID: {chat_id}")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle normal text messages"""
     if not update.message or not update.message.text:
         return
         
@@ -1283,8 +1277,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     del user_captcha[user.id]
             return
         
+        # After successful CAPTCHA verification
         await update.message.reply_text("✅ CAPTCHA verified successfully!")
-        await show_dashboard(update, context)
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+            [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "⚠️ You must join our channel and group to use this bot!\n\n"
+            "1. Join our channel\n"
+            "2. Join our group\n"
+            "3. Click 'Check Membership' button",
+            reply_markup=reply_markup
+        )
         return
     
     # Check membership first
@@ -1406,7 +1414,7 @@ async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     reply_to_message = update.message.reply_to_message
     photo = None
     
-    if reply_to_message and reply_to_message.photo:
+    if (reply_to_message and reply_to_message.photo):
         # Use the photo from the replied message
         photo = reply_to_message.photo[-1]
     elif update.message.photo:
@@ -1620,7 +1628,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
@@ -1637,7 +1645,7 @@ def main():
         entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
+        ],
         fallbacks=[CommandHandler("start", start)],
         name="payment_screenshot_conversation",
         persistent=False
