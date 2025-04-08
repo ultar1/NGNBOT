@@ -430,50 +430,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif query.data == 'withdraw':
-        balance = user_balances.get(user_id, 0)
-        
-        # Check daily withdrawal limit
-        if not await can_withdraw_today(user_id):
-            await query.answer()
-            tomorrow = datetime.now() + timedelta(days=1)
-            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-            time_until = tomorrow - datetime.now()
-            hours = int(time_until.total_seconds() // 3600)
-            minutes = int((time_until.total_seconds() % 3600) // 60)
-            
-            keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-            await query.message.edit_text(
-                f"❌ You can only withdraw once per day!\n"
-                f"Next withdrawal available in {hours}h {minutes}m ⏳",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return
-        
-        if balance < MIN_WITHDRAWAL:
-            await query.answer()
-            keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-            await query.message.edit_text(
-                f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
-                f"Your current balance: {balance} points (₦{balance})",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return
-        
-        # Start withdrawal process with amount input
-        user_withdrawal_state[user_id] = {'stage': 'withdrawal_amount'}
-        await query.answer()
-        max_allowed = min(balance, MAX_WITHDRAWAL)  # Can't withdraw more than balance or max limit
-        
-        keyboard = [[InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]]
-        await query.message.edit_text(
-            f"💰 Enter withdrawal amount:\n\n"
-            f"Minimum: ₦{MIN_WITHDRAWAL}\n"
-            f"Maximum: ₦{max_allowed}\n"
-            f"Your balance: ₦{balance}\n\n"
-            f"Please enter an amount between ₦{MIN_WITHDRAWAL} and ₦{max_allowed}:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return WITHDRAWAL_AMOUNT
+        await handle_withdrawal_start(update, context)
+        return ACCOUNT_NUMBER
 
     elif query.data == 'daily_bonus':
         daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
@@ -642,65 +600,43 @@ async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-async def handle_withdrawal_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    amount_text = update.message.text.strip()
-    
-    try:
-        amount = int(amount_text)
-        balance = user_balances.get(user_id, 0)
-        max_allowed = min(balance, MAX_WITHDRAWAL)
-        
-        if amount < MIN_WITHDRAWAL:
-            await update.message.reply_text(
-                f"❌ Minimum withdrawal amount is ₦{MIN_WITHDRAWAL}!\n"
-                f"Please enter a larger amount:"
-            )
-            return WITHDRAWAL_AMOUNT
-            
-        if amount > max_allowed:
-            await update.message.reply_text(
-                f"❌ Maximum withdrawal amount is ₦{max_allowed}!\n"
-                f"Please enter a smaller amount:"
-            )
-            return WITHDRAWAL_AMOUNT
-            
-        # Store amount and continue with account name
-        user_withdrawal_state[user_id].update({
-            'stage': 'account_name',
-            'amount': amount
-        })
-        
-        await update.message.reply_text(
-            "Please enter your Account Name (as shown in your bank):"
-        )
-        return ACCOUNT_NAME
-        
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Please enter a valid number!\n"
-            f"Enter an amount between ₦{MIN_WITHDRAWAL} and ₦{max_allowed}:"
-        )
-        return WITHDRAWAL_AMOUNT
 
-async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    account_name = update.message.text.strip()
-    
-    if len(account_name) < 3:
+    # Check if user is eligible to withdraw
+    balance = user_balances.get(user_id, 0)
+    if balance < MIN_WITHDRAWAL:
         await update.message.reply_text(
-            "❌ Please enter a valid account name!"
+            f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
+            f"Your current balance: {balance} points (₦{balance})"
         )
-        return ACCOUNT_NAME
-    
-    # Store account name and show bank selection
-    user_withdrawal_state[user_id]['account_name'] = account_name
-    keyboard = [[InlineKeyboardButton(bank, callback_data=f'bank_{bank}')] 
-                for bank in BANKS]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
+        return
+
+    # Start withdrawal process
+    user_withdrawal_state[user_id] = {'stage': 'account_number'}
     await update.message.reply_text(
-        "Please select your bank:",
+        "Please enter your Account Number (10 digits):"
+    )
+    return ACCOUNT_NUMBER
+
+async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    account_number = update.message.text.strip()
+
+    # Validate account number (10 digits for Nigerian banks)
+    if not account_number.isdigit() or len(account_number) != 10:
+        await update.message.reply_text(
+            "❌ Invalid account number! Please enter a valid 10-digit account number."
+        )
+        return ACCOUNT_NUMBER
+
+    # Store account number and ask for bank name
+    user_withdrawal_state[user_id]['account_number'] = account_number
+    keyboard = [[InlineKeyboardButton(bank, callback_data=f'bank_{bank}')] for bank in BANKS]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Please select your Bank:",
         reply_markup=reply_markup
     )
     return BANK_NAME
@@ -709,81 +645,76 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     user_id = query.from_user.id
     bank = query.data.replace('bank_', '')
-    
+
     if bank not in BANKS:
         await query.answer()
         await query.message.reply_text("❌ Invalid bank selection. Please try again.")
         return BANK_NAME
-    
-    # Store bank name and ask for account number
+
+    # Store bank name and ask for account name
     user_withdrawal_state[user_id]['bank'] = bank
     await query.answer()
     await query.message.reply_text(
-        "Please enter your Account Number:"
+        "Please enter your Account Name (as shown in your bank):"
     )
-    return ACCOUNT_NUMBER
+    return ACCOUNT_NAME
 
-async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    account_number = update.message.text.strip()
-    
-    # Validate account number (10 digits for Nigerian banks)
-    if not account_number.isdigit() or len(account_number) != 10:
+    account_name = update.message.text.strip()
+
+    if len(account_name) < 3:
         await update.message.reply_text(
-            "❌ Invalid account number! Please enter a valid 10-digit account number."
+            "❌ Please enter a valid account name!"
         )
-        return ACCOUNT_NUMBER
-    
-    # Store account number and show amount selection
-    user_data = user_withdrawal_state.get(user_id, {})
-    user_data['account_number'] = account_number
-    user_withdrawal_state[user_id] = user_data
-    
-    # Show amount selection buttons
+        return ACCOUNT_NAME
+
+    # Store account name and show amount selection buttons
+    user_withdrawal_state[user_id]['account_name'] = account_name
+    balance = user_balances.get(user_id, 0)
     keyboard = [
-        [InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}') for amount in WITHDRAWAL_AMOUNTS],
+        [InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}') for amount in WITHDRAWAL_AMOUNTS if amount <= balance],
         [InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]
     ]
-    
+
     await update.message.reply_text(
-        f"💰 Select withdrawal amount:\nYour balance: ₦{user_balances.get(user_id, 0)}",
+        f"💰 Select withdrawal amount:\nYour balance: ₦{balance}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return 'SELECT_AMOUNT'
 
 async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle amount selection from buttons"""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     await query.answer()
-    
+
     if query.data == 'back_to_menu':
         if user_id in user_withdrawal_state:
             del user_withdrawal_state[user_id]
         await show_dashboard(update, context)
         return ConversationHandler.END
-    
+
     amount = int(query.data.replace('withdraw_amount_', ''))
     user_data = user_withdrawal_state.get(user_id, {})
-    
+
     # Process withdrawal
     withdrawal_amount = amount
     balance = user_balances.get(user_id, 0)
-    
+
     if withdrawal_amount > balance:
         await query.message.edit_text(
             "❌ Insufficient balance for this withdrawal amount!"
         )
         return ConversationHandler.END
-    
+
     # Update user balance and last withdrawal date
     user_balances[user_id] = balance - withdrawal_amount
     last_withdrawal[user_id] = datetime.now().date()
-    
+
     # Send withdrawal notification to admin
     await notify_withdrawal_request(user_id, withdrawal_amount, user_data, context)
-    
+
     # Show confirmation to user
     keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
     await query.message.edit_text(
@@ -797,7 +728,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
         f"Your payment will be processed within 24 hours!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
+
     return ConversationHandler.END
 
 async def notify_withdrawal_request(user_id: int, amount: int, account_info: dict, context: ContextTypes.DEFAULT_TYPE):
@@ -1241,10 +1172,9 @@ def main():
     withdrawal_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
         states={
-            WITHDRAWAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_withdrawal_amount)],
-            ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
-            BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
             ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)],
+            BANK_NAME: [CallbackQueryHandler(handle_bank_selection, pattern='^bank_')],
+            ACCOUNT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name)],
             'SELECT_AMOUNT': [CallbackQueryHandler(handle_amount_selection, pattern='^withdraw_amount_')]
         },
         fallbacks=[
