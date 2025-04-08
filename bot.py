@@ -243,7 +243,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
         
         # Check if user was previously verified and now isn't
         was_verified = user_verified_status.get(user_id, False)
-        if was_verified and not is_verified:
+        if (was_verified and not is_verified):
             # Apply penalty
             current_balance = user_balances.get(user_id, 0)
             user_balances[user_id] = max(0, current_balance - LEAVE_PENALTY)  # Don't go below 0
@@ -1495,7 +1495,7 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    heroku_app_name = os.getenv("HEROKU_APP_NAME", "ngnbot-976310dc7194")  # Update with correct app name
+    heroku_app_name = os.getenv("HEROKU_APP_NAME", "ngnbot-976310dc7194")
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
@@ -1508,6 +1508,7 @@ def main():
     # Define handlers first
     print("Setting up handlers...")
     
+    # Rest of handler definitions...
     # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
         entry_points=[
@@ -1579,15 +1580,16 @@ def main():
     print("Setting up webhook...")
 
     try:
-        # Set up webhook with correct domain
-        webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+        # Set up webhook with correct domain and path
+        webhook_path = f"/{token}"  # Define webhook path
+        webhook_url = f"https://{heroku_app_name}.herokuapp.com{webhook_path}"
         print(f"Setting webhook to: {webhook_url}")
         
         # Start the webhook with proper configuration
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
-            url_path=token,
+            url_path=webhook_path.lstrip('/'),  # Remove leading slash
             webhook_url=webhook_url,
             allowed_updates=[
                 "message",
