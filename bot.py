@@ -1262,3 +1262,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if daily_chat_count[user.id] < MAX_DAILY_CHAT_REWARD:
         daily_chat_count[user.id] += 1
         user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+
+    # Handle CAPTCHA button first
+    if query.data == 'new_captcha':
+        await handle_new_captcha(update, context)
+        return
+
+    # Handle verification button next
+    if query.data == 'verify_membership':
+        await handle_verify_membership(update, context)
+        return
+
+    # Rest of the button handlers...
