@@ -608,13 +608,15 @@ async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+# Fix the AttributeError in handle_withdrawal_start by using callback_query.message if update.message is None
 async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     # Check if user is eligible to withdraw
     balance = user_balances.get(user_id, 0)
     if balance < MIN_WITHDRAWAL:
-        await update.message.reply_text(
+        target_message = update.message or update.callback_query.message
+        await target_message.reply_text(
             f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
             f"Your current balance: {balance} points (₦{balance})"
         )
@@ -622,7 +624,8 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
 
     # Start withdrawal process
     user_withdrawal_state[user_id] = {'stage': 'account_number'}
-    await update.message.reply_text(
+    target_message = update.message or update.callback_query.message
+    await target_message.reply_text(
         "Please enter your Account Number (10 digits):"
     )
     return ACCOUNT_NUMBER
