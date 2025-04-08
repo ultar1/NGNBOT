@@ -1290,7 +1290,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'check_membership':
         is_member = await check_membership(user_id, context)
-        if is_member:
+        if (is_member):
             await query.answer("✅ Membership verified!")
             await show_dashboard(update, context)
         else:
@@ -1478,7 +1478,7 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv('BOT_TOKEN')
     port = int(os.getenv('PORT', '8443'))
-    heroku_app_name = os.getenv('HEROKU_APP_NAME')
+    heroku_app_name = os.getenv('HEROKU_APP_NAME', 'sub9ja')  # Add default app name
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
@@ -1486,51 +1486,7 @@ def main():
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Update withdrawal conversation handler registration
-    withdrawal_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(handle_withdrawal_start, pattern='^withdraw$')
-        ],
-        states={
-            ACCOUNT_NUMBER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
-                CallbackQueryHandler(handle_bank_name, pattern='^bank_')
-            ],
-            BANK_NAME: [
-                CallbackQueryHandler(handle_bank_name, pattern='^bank_'),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ],
-            ACCOUNT_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ],
-            AMOUNT_SELECTION: [
-                CallbackQueryHandler(handle_amount_selection, pattern='^amount_'),
-                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
-            ]
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
-            CallbackQueryHandler(button_handler, pattern='^back_to_menu$'),
-            CommandHandler('start', start)
-        ],
-        allow_reentry=True,
-        name="withdrawal_conversation",
-        persistent=False
-    )
-
-    # Create payment screenshot handler
-    payment_handler = ConversationHandler(
-        entry_points=[CommandHandler("paid", handle_paid_command)],
-        states={
-            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
-        fallbacks=[CommandHandler('start', start)],
-        name="payment_screenshot_conversation",
-        persistent=False
-    )
-
+    # Register handlers in correct order
     # Register conversation handlers first
     application.add_handler(withdrawal_handler)
     application.add_handler(payment_handler)
@@ -1552,10 +1508,12 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Set up webhook configuration
-    if heroku_app_name:
-        # Running on Heroku
+    try:
+        print("Starting bot...")
+        
+        # Set up webhook
         webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+        print(f"Setting webhook to: {webhook_url}")
         
         # Start the webhook
         application.run_webhook(
@@ -1569,16 +1527,9 @@ def main():
                 "chat_member"
             ]
         )
-    else:
-        # Local development - use polling
-        application.run_polling(
-            allowed_updates=[
-                "message",
-                "callback_query",
-                "chat_member"
-            ],
-            drop_pending_updates=True
-        )
+    except Exception as e:
+        print(f"Error starting bot: {str(e)}")
+        raise e
 
 if __name__ == '__main__':
     main()
