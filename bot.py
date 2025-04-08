@@ -516,6 +516,7 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task submission with screenshot"""
     user = update.effective_user
 
     # Check membership
@@ -524,41 +525,38 @@ async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await show_join_message(update, context)
         return
 
-    # Get the task content
-    if not context.args:
+    # Check if photo is attached
+    if not update.message.photo:
         await update.message.reply_text(
-            "❌ Please include your content with the command!\n"
-            "Example: /task Check out this amazing bot! It offers..."
+            "❌ Please send a screenshot of your completed task!\n"
+            "Usage: Send the /task command with a screenshot attached"
         )
         return
 
-    content = ' '.join(context.args)
-
-    # Notify admin about the submission
-    admin_message = (
-        f"📝 New Task Submission!\n\n"
-        f"From User:\n"
-        f"• ID: {user.id}\n"
-        f"• Username: @{user.username if user.username else 'None'}\n"
-        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
-        f"Content:\n{content}\n\n"
-        f"Use /approve_task {user.id} to approve\n"
-        f"Use /reject_task {user.id} to reject"
-    )
-
     try:
-        await context.bot.send_message(
+        # Notify admin about the submission
+        admin_message = (
+            f"📝 New Task Submission!\n\n"
+            f"From User:\n"
+            f"• ID: {user.id}\n"
+            f"• Username: @{user.username if user.username else 'None'}\n"
+            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}"
+        )
+
+        # Forward screenshot to admin
+        await context.bot.send_photo(
             chat_id=ADMIN_ID,
-            text=admin_message
+            photo=update.message.photo[-1].file_id,
+            caption=admin_message + f"\n\nUse /approve_task {user.id} to approve\nUse /reject_task {user.id} to reject"
         )
 
         await update.message.reply_text(
-            "✅ Your task has been submitted for review!\n"
+            "✅ Your task screenshot has been submitted for review!\n"
             "You will receive your reward once approved."
         )
     except Exception as e:
         await update.message.reply_text(
-            "❌ Error submitting task. Please ensure your content doesn't contain special characters."
+            "❌ Error submitting task. Please try again later."
         )
 
 async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
