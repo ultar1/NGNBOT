@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from telegram.constants import ChatMemberStatus
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Table, MetaData, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Table, MetaData, Boolean, BigInteger
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
 import threading
@@ -60,7 +60,7 @@ def get_db_session():
 class Activity(Base):
     __tablename__ = 'activities'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id'))
     action_type = Column(String)  # e.g., 'login', 'chat', 'withdrawal', 'referral'
     description = Column(String)
     amount = Column(Float, nullable=True)
@@ -71,7 +71,7 @@ class Activity(Base):
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True)
+    telegram_id = Column(BigInteger, unique=True)
     balance = Column(Float, default=0)
     last_signin = Column(DateTime)
     last_withdrawal = Column(DateTime)
@@ -85,8 +85,8 @@ class User(Base):
 class Referral(Base):
     __tablename__ = 'referrals'
     id = Column(Integer, primary_key=True)
-    referrer_id = Column(Integer, ForeignKey('users.telegram_id'))
-    referred_id = Column(Integer)
+    referrer_id = Column(BigInteger, ForeignKey('users.telegram_id'))
+    referred_id = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.now())
     
     referrer = relationship('User', back_populates='referrals')
@@ -94,7 +94,7 @@ class Referral(Base):
 class Withdrawal(Base):
     __tablename__ = 'withdrawals'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id'))
     amount = Column(Float)
     account_name = Column(String)
     bank_name = Column(String)
