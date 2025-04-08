@@ -1216,6 +1216,17 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to get chat ID"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+        
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"Current chat ID: {chat_id}")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle normal text messages"""
     if not update.message or not update.message.text:
