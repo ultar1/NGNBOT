@@ -623,6 +623,9 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     user_id = query.from_user.id
     
+    # Initialize withdrawal dictionary
+    context.user_data['withdrawal'] = {}
+    
     # Check if user has saved bank details
     if user_id in user_bank_info:
         saved_info = user_bank_info[user_id]
