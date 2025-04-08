@@ -427,6 +427,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Check if user needs CAPTCHA verification
     if user.id not in user_balances and user.id not in user_captcha:
+        # Give welcome bonus for new users
+        if user.id not in user_balances:
+            print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user.id}")
+            user_balances[user.id] = WELCOME_BONUS
+            referrals[user.id] = set()
+            await update.message.reply_text(
+                f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+            )
+        
         await send_captcha(update, context, user.id)
         return
     
@@ -1608,7 +1617,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
