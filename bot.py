@@ -901,6 +901,22 @@ async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAUL
             caption="✅ Payment Confirmation\nYour withdrawal has been processed and paid!"
         )
         
+        # Send payment notification to channel
+        channel_message = (
+            "💸 Payment Successfully Processed!\n\n"
+            f"User: {target_user.first_name} {target_user.last_name if target_user.last_name else ''}\n"
+            "Status: ✅ Paid\n\n"
+            "💡 Join us and start earning:\n"
+            f"https://t.me/{BOT_USERNAME}"
+        )
+        
+        # Send to announcement channel
+        await context.bot.send_photo(
+            chat_id=ANNOUNCEMENT_CHANNEL,
+            photo=update.message.photo[-1].file_id,
+            caption=channel_message
+        )
+        
         # Clear pending payment
         del context.user_data['pending_payment_user']
         
