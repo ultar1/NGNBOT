@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -10,7 +10,7 @@ class User(Base):
     __tablename__ = 'users'
     
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True)
+    telegram_id = Column(BigInteger, unique=True)
     username = Column(String)
     first_name = Column(String)
     last_name = Column(String)
@@ -24,7 +24,7 @@ class Activity(Base):
     __tablename__ = 'activities'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id'))
     activity_type = Column(String)  # e.g., "verification", "withdrawal", "referral"
     description = Column(Text)
     amount = Column(Float, nullable=True)
@@ -35,7 +35,7 @@ class Transaction(Base):
     __tablename__ = 'transactions'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id'))
     type = Column(String)  # "withdrawal", "referral_bonus", etc.
     amount = Column(Float)
     status = Column(String)  # "pending", "completed", "failed"
