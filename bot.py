@@ -1215,3 +1215,50 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid user ID!")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle normal text messages"""
+    if not update.message or not update.message.text:
+        return
+        
+    user = update.effective_user
+    
+    # Check if user has pending CAPTCHA
+    if user.id in user_captcha:
+        is_verified = await verify_captcha(update.message.text, user.id)
+        if not is_verified:
+            remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
+            if remaining_attempts > 0:
+                await update.message.reply_text(
+                    f"❌ Wrong code! You have {remaining_attempts} attempts remaining.\n"
+                    "Try again or click Generate New CAPTCHA for a new code."
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ Too many failed attempts. Please start over with /start"
+                )
+                if user.id in user_captcha:
+                    del user_captcha[user.id]
+            return
+        
+        await update.message.reply_text("✅ CAPTCHA verified successfully!")
+        await show_dashboard(update, context)
+        return
+    
+    # Check membership first
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+    
+    # Process chat reward
+    today = datetime.now().date()
+    if user.id not in last_chat_reward or last_chat_reward[user.id] != today:
+        # Reset daily counts if it's a new day
+        last_chat_reward[user.id] = today
+        daily_chat_count[user.id] = 0
+    
+    # Check if user hasn't reached daily chat reward limit
+    if daily_chat_count[user.id] < MAX_DAILY_CHAT_REWARD:
+        daily_chat_count[user.id] += 1
+        user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
