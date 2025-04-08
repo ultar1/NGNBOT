@@ -1560,6 +1560,14 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
     """Handle user verification completion"""
     print(f"Handling verification completion for user {user_id}")  # Debug log
     
+    # Show join message first after CAPTCHA
+    await show_join_message(update, context)
+
+    # Check if user is verified
+    is_member = await check_membership(user_id, context)
+    if not is_member:
+        return
+        
     # Check if this is a new user
     is_new_user = user_id not in user_balances
     
@@ -1589,13 +1597,6 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
         if referrer_id and referrer_id != user_id:
             print(f"Processing referral: {referrer_id} referred {user_id}")  # Debug log
             try:
-                # Get both users' info for proper tagging
-                new_user = await context.bot.get_chat(user_id)
-                referrer = await context.bot.get_chat(referrer_id)
-                
-                # Create user mentions
-                new_user_mention = f"@{new_user.username}" if new_user.username else new_user.first_name
-                
                 # Add to referrals list and credit bonus
                 if referrer_id not in referrals:
                     referrals[referrer_id] = set()
@@ -1605,23 +1606,17 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
                 user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
                 print(f"Credited referral bonus to {referrer_id}")  # Debug log
                 
-                # Notify referrer with new user's tag
-                notification_text = (
-                    f"🎉 Your referral {new_user_mention} has been verified!\n"
-                    f"You earned ₦{REFERRAL_BONUS}!\n"
-                    f"New balance: ₦{user_balances[referrer_id]}"
-                )
-                
+                # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=notification_text
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
                 )
                 print(f"Notified referrer {referrer_id}")  # Debug log
+                
+                # Notify admin
+                await notify_admin_verified_user(user_id, referrer_id, context)
             except Exception as e:
                 print(f"Error processing referral: {e}")
-            
-            # Notify admin
-            await notify_admin_verified_user(user_id, referrer_id, context)
         else:
             # Notify admin about direct join
             await notify_admin_verified_user(user_id, None, context)
@@ -1633,7 +1628,7 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
         if user_id in pending_referrals:
             del pending_referrals[user_id]
     
-    # Show dashboard
+    # Show dashboard only after verification
     if isinstance(update, Update):
         await show_dashboard(update, context)
 
