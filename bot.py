@@ -1291,13 +1291,75 @@ def main():
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Add handlers
-    # ... existing handler code ...
+    # Update withdrawal conversation handler registration
+    withdrawal_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(handle_withdrawal_start, pattern='^withdraw$')
+        ],
+        states={
+            ACCOUNT_NUMBER: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
+                CallbackQueryHandler(handle_bank_name, pattern='^bank_')
+            ],
+            BANK_NAME: [
+                CallbackQueryHandler(handle_bank_name, pattern='^bank_'),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
+            ],
+            ACCOUNT_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
+            ],
+            AMOUNT_SELECTION: [
+                CallbackQueryHandler(handle_amount_selection, pattern='^amount_'),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
+            ]
+        },
+        fallbacks=[
+            CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
+            CallbackQueryHandler(button_handler, pattern='^back_to_menu$'),
+            CommandHandler('start', start)
+        ],
+        allow_reentry=True
+    )
+
+    # Create payment screenshot handler
+    payment_handler = ConversationHandler(
+        entry_points=[CommandHandler("paid", handle_paid_command)],
+        states={
+            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
+        },
+        fallbacks=[CommandHandler('start', start)],
+        name="payment_screenshot_conversation"
+    )
+
+    # Register all handlers in correct order
+    application.add_handler(withdrawal_handler)
+    application.add_handler(payment_handler)
+    
+    # Basic command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("chatid", get_chat_id))
+    application.add_handler(CommandHandler("generate", handle_generate_command))
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))
+    application.add_handler(CommandHandler("task", handle_task_command))
+    application.add_handler(CommandHandler("approve_task", handle_approve_task))
+    application.add_handler(CommandHandler("reject_task", handle_reject_task))
+    application.add_handler(CommandHandler("reject", handle_reject_command))
+    application.add_handler(CommandHandler("add", handle_add_command))
+    application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    
+    # General message and button handlers
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Set up webhook configuration
     if heroku_app_name:
         # Running on Heroku
         webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+        
+        # Start the webhook
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
@@ -1311,11 +1373,14 @@ def main():
         )
     else:
         # Local development - use polling
-        application.run_polling(allowed_updates=[
-            "message",
-            "callback_query",
-            "chat_member"
-        ])
+        application.run_polling(
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "chat_member"
+            ],
+            drop_pending_updates=True
+        )
 
 if __name__ == '__main__':
     main()
