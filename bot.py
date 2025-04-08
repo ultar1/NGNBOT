@@ -1495,10 +1495,13 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    heroku_app_name = os.getenv("HEROKU_APP_NAME", "ngnbot-976310dc7194")
+    webhook_base_url = os.getenv("WEBHOOK_URL")  # Get webhook URL from environment variable
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
+    
+    if not webhook_base_url:
+        raise ValueError("No WEBHOOK_URL found in environment variables")
 
     print("Starting bot initialization...")
 
@@ -1581,22 +1584,22 @@ def main():
 
     try:
         # Set up webhook with correct domain and path
-        webhook_path = f"/{token}"  # Define webhook path
-        webhook_url = f"https://{heroku_app_name}.herokuapp.com{webhook_path}"
+        webhook_path = token
+        webhook_url = f"{webhook_base_url}/{webhook_path}"
         print(f"Setting webhook to: {webhook_url}")
         
         # Start the webhook with proper configuration
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
-            url_path=webhook_path.lstrip('/'),  # Remove leading slash
+            url_path=webhook_path,
             webhook_url=webhook_url,
             allowed_updates=[
                 "message",
                 "callback_query",
                 "chat_member"
             ],
-            drop_pending_updates=True  # Add this to clear any pending updates
+            drop_pending_updates=True
         )
         print("Webhook setup complete!")
     except Exception as e:
