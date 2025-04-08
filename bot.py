@@ -465,17 +465,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_member:
         await show_join_message(update, context)
         return
-
-    # Handle new users after verification
-    if user.id not in user_balances:
-        print(f"Adding welcome bonus of {WELCOME_BONUS} to user {user.id}")  # Debug log
-        user_balances[user.id] = WELCOME_BONUS
-        referrals[user.id] = set()
-        await update.message.reply_text(
-            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-        )
     
-    # Show dashboard for verified users
+    # Show dashboard for existing users
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -494,7 +485,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
     # Mark user as verified
     user_verified_status[user_id] = True
     
-    # Handle welcome bonus for new users only
+    # Give welcome bonus ONLY IF this is their first verification and they're not in user_balances
     if user_id not in user_balances:
         print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user_id}")
         user_balances[user_id] = WELCOME_BONUS
