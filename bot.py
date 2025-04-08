@@ -630,21 +630,11 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     )
     return BANK_NAME
 
-async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    bank = query.data.replace('bank_', '')
+# Fix the syntax error in the handle_account_name function
+async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    account_name = update.message.text.strip()
 
-    if bank not in BANKS:
-        await query.answer()
-        await query.message.reply_text("❌ Invalid bank selection. Please try again.")
-        return BANK_NAME
-
-    # Store bank name and ask for account name
-    user_withdrawal_state[user_id]['bank'] = bank
-    await query.answer()
-    await query.message.reply_text(
-        "Please enter your Account Name (as shown in your bank):"
     if len(account_name) < 3:
         await update.message.reply_text(
             "❌ Please enter a valid account name!"
@@ -664,6 +654,24 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return 'SELECT_AMOUNT'
+
+async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    bank = query.data.replace('bank_', '')
+
+    if bank not in BANKS:
+        await query.answer()
+        await query.message.reply_text("❌ Invalid bank selection. Please try again.")
+        return BANK_NAME
+
+    # Store bank name and ask for account name
+    user_withdrawal_state[user_id]['bank'] = bank
+    await query.answer()
+    await query.message.reply_text(
+        "Please enter your Account Name (as shown in your bank):"
+    )
+    return ACCOUNT_NAME
 
 async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
