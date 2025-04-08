@@ -60,13 +60,14 @@ user_verified_status = {}
 active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
 used_coupons = {}    # Format: {code: [user_ids]}
 
-# Conversation states
+# Define conversation states
 (
     ACCOUNT_NUMBER,
     BANK_NAME,
     ACCOUNT_NAME,
-    AMOUNT_SELECTION
-) = range(4)
+    AMOUNT_SELECTION,
+    PAYMENT_SCREENSHOT  # Added payment screenshot state
+) = range(5)  # Updated range to include new state
 
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
@@ -1139,7 +1140,6 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ Usage: /info <user_id>")
         return
 
     try:
