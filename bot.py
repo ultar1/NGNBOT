@@ -953,7 +953,7 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# Fix the generate command to handle errors and provide better feedback
+# Fix the /generate command to escape special characters properly
 async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command to generate a coupon code"""
     user = update.effective_user
@@ -982,11 +982,11 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
 
         await update.message.reply_text(
             f"✅ Generated new coupon code:\n\n"
-            f"Code: `{code}`\n"
+            f"Code: `{escape_markdown(code)}`\n"
             f"Amount: ₦{amount}\n"
             f"Expires: {expiration_time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             f"Users can redeem this code using:\n"
-            f"/redeem {code}",
+            f"/redeem {escape_markdown(code)}",
             parse_mode='MarkdownV2'
         )
     except ValueError:
@@ -1064,7 +1064,7 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-# Fix the AttributeError in show_top_referrals by using callback_query.message if update.message is None
+# Update the top referral menu to edit the existing menu instead of dropping another menu
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
     message = "🏆 Top 5 Referrers:\n\n"
@@ -1077,10 +1077,9 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
 
-    # Use callback_query.message if update.message is None
     target_message = update.message or update.callback_query.message
 
-    await target_message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+    await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Add a function to clean expired coupons periodically
 async def clean_expired_coupons():
