@@ -313,20 +313,39 @@ check_membership = check_and_handle_membership_change
 
 # Provide channel and group buttons during verification if the user isn't in them
 async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show join message with channel and group buttons"""
     keyboard = [
         [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
         [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
         [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
+    
+    message_text = (
         "⚠️ You must join our channel and group to use this bot!\n\n"
         "1. Join our channel\n"
         "2. Join our group\n"
-        "3. Click 'Check Membership' button",
-        reply_markup=reply_markup
+        "3. Click 'Check Membership' button"
     )
+
+    # Handle both new messages and editing existing messages
+    if isinstance(update, Update):
+        if update.callback_query:
+            await update.callback_query.message.edit_text(
+                message_text,
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                message_text,
+                reply_markup=reply_markup
+            )
+    else:
+        # If update is a Message object directly
+        await update.edit_text(
+            message_text,
+            reply_markup=reply_markup
+        )
 
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
