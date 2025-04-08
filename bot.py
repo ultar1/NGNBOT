@@ -492,244 +492,49 @@ async def can_withdraw_today(user_id: int) -> bool:
     last_date = last_withdrawal.get(user_id)
     return last_date is None or last_date < today
 
-# Fix the button_handler function to handle all button commands properly
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-
-    if query.data == 'verify_membership':
-        await handle_verify_membership(update, context)
-        return
-
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            await query.answer("✅ Membership verified!")
-            await show_dashboard(update, context)
-        else:
-            await query.answer("❌ Please join both the channel and group!")
-        return
-
-    if query.data == 'new_captcha':
-        await handle_new_captcha(update, context)
-        return
-
-    is_member = await check_membership(user_id, context)
-    if not is_member:
-        await query.answer("❌ Please join our channel and group first!")
-        await show_join_message(query.message, context)
-        return
-
-    if query.data == 'back_to_menu':
-        await query.answer("🔙 Returning to main menu...")
-        await show_dashboard(update, context)
-        return
-
-    if query.data == 'my_referrals':
-        await show_referral_menu(update, context)
-        return
-
-    elif query.data == 'top_referrals':
-        await show_top_referrals(update, context)
-        return
-
-    elif query.data == 'withdraw':
-        await handle_withdrawal_start(update, context)
-        return
-
-    elif query.data == 'submit_task':
-        await query.answer("📝 Submit your content task using the /task command.")
-        return
-
-    elif query.data.startswith('withdraw_amount_'):
-        await handle_amount_selection(update, context)
-        return
-
-    elif query.data.startswith('bank_'):
-        await handle_bank_selection(update, context)
-        return
-
-    elif query.data == 'daily_bonus':
-        daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
-        if daily_bonus_earned:
-            await query.answer("✅ Daily bonus credited!")
-            await query.message.edit_text(
-                f"🎉 You have received your daily bonus of {DAILY_BONUS} points (₦{DAILY_BONUS})!",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-            )
-        else:
-            await query.answer("❌ You have already claimed your daily bonus today!")
-        return
-
-    elif query.data == 'balance':
-        balance = user_balances.get(user_id, 0)
-        await query.answer()
-        await query.message.edit_text(
-            f"Your current balance: {balance} points (₦{balance}) 💰",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-        )
-        return
-
-    elif query.data == 'tasks':
-        await handle_tasks_button(update, context)
-        return
-
-    await query.answer("❌ Unknown action.")
-
-def escape_markdown(text: str) -> str:
-    """Escape special characters for MarkdownV2"""
-    special_chars = ['_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    escaped_text = text
-    for char in special_chars:
-        escaped_text = escaped_text.replace(char, f'\\{char}')
-    return escaped_text
-
-# Fix the task button to ensure it works correctly
-async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    task_text = (
-        "📋 Available Tasks:\n\n"
-        "1️⃣ Create Content Task\n"
-        "• Create engaging content about our bot\n"
-        "• Submit using /task command\n"
-        "• Reward: ₦100\n\n"
-        "Instructions:\n"
-        "• Write about bot features\n"
-        "• Include referral benefits\n"
-        "• Make it engaging\n"
-        "• Submit using: /task your_content_here"
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
-    ]
-
-    await query.message.edit_text(
-        task_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task submission with screenshot"""
-    user = update.effective_user
-
-    # Check membership
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
-        return
-
-    # Check if command is replying to a message with photo
-    reply_to_message = update.message.reply_to_message
-    photo = None
-    
-    if reply_to_message and reply_to_message.photo:
-        # Use the photo from the replied message
-        photo = reply_to_message.photo[-1]
-    elif update.message.photo:
-        # Use directly attached photo
-        photo = update.message.photo[-1]
-    
-    if not photo:
-        await update.message.reply_text(
-            "❌ Please either:\n"
-            "1. Attach a screenshot with the /task command, or\n"
-            "2. Reply to a screenshot with the /task command"
-        )
-        return
-
-    try:
-        # Notify admin about the submission
-        admin_message = (
-            f"📝 New Task Submission!\n\n"
-            f"From User:\n"
-            f"• ID: {user.id}\n"
-            f"• Username: @{user.username if user.username else 'None'}\n"
-            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}"
-        )
-
-        # Forward screenshot to admin
-        await context.bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=photo.file_id,
-            caption=admin_message + f"\n\nUse /approve_task {user.id} to approve\nUse /reject_task {user.id} to reject"
-        )
-
-        await update.message.reply_text(
-            "✅ Your task screenshot has been submitted for review!\n"
-            "You will receive your reward once approved."
-        )
-    except Exception as e:
-        await update.message.reply_text(
-            "❌ Error submitting task. Please try again later."
-        )
-
-async def handle_approve_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task approval by admin"""
-    user = update.effective_user
-    
-    if not await is_admin(user.id):
-        await update.message.reply_text("❌ This command is only for admins\\!")
-        return
-    
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /approve\\_task <user\\_id>")
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
+async def verify_referrals_membership(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Verify that all referrals are still members"""
+    if user_id not in referrals:
+        return True
         
-        # Add reward to user's balance
-        user_balances[target_user_id] = user_balances.get(target_user_id, 0) + TASK_REWARD
-        
-        # Notify user
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=f"🎉 Your task has been approved\\!\n"
-                 f"Added ₦{TASK_REWARD} to your balance\\."
-        )
-        
-        await update.message.reply_text(f"✅ Task approved for user {target_user_id}")
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+    all_members = True
+    not_in_channel = []
+    
+    for referred_id in referrals[user_id]:
+        is_member = await check_membership(referred_id, context)
+        if not is_member:
+            all_members = False
+            not_in_channel.append(referred_id)
+    
+    return all_members, not_in_channel
 
-async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task rejection by admin"""
-    user = update.effective_user
-    
-    if not await is_admin(user.id):
-        await update.message.reply_text("❌ This command is only for admins\\!")
-        return
-    
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /reject\\_task <user\\_id> [reason]")
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        reason = ' '.join(context.args[1:]) if len(context.args) > 1 else "No reason provided"
-        
-        # Notify user
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=f"❌ Your task has been rejected\\.\n"
-                 f"Reason: {reason}"
-        )
-        
-        await update.message.reply_text(f"✅ Task rejected for user {target_user_id}")
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-# Handle withdrawal process
 async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the withdrawal process"""
     query = update.callback_query
     user_id = query.from_user.id
+    
+    # First check user's membership
+    is_member = await check_membership(user_id, context)
+    if not is_member:
+        await query.message.edit_text(
+            "❌ You must be a member of our channel and group to withdraw!\n"
+            "Please join and try again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+        return ConversationHandler.END
+    
+    # Check referrals' membership
+    all_members, not_in_channel = await verify_referrals_membership(user_id, context)
+    if not all_members:
+        referral_list = "\n".join([f"• User ID: {uid}" for uid in not_in_channel])
+        await query.message.edit_text(
+            "❌ Some of your referrals are not in the channel/group!\n\n"
+            "The following referrals need to join:\n"
+            f"{referral_list}\n\n"
+            "Please ask them to join before withdrawing.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+        return ConversationHandler.END
     
     # Initialize withdrawal dictionary
     context.user_data['withdrawal'] = {}
