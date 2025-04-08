@@ -291,23 +291,26 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             reply_markup=reply_markup
         )
 
-# Fix the AttributeError in show_referral_menu by using callback_query.message if update.message is None
+# Update referral and withdrawal menus to edit the existing menu instead of dropping another menu
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ref_count = len(referrals.get(user.id, set()))
+    link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
 
     keyboard = [
+        [InlineKeyboardButton("🎯 Get Link", callback_data='get_link')],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Use callback_query.message if update.message is None
     target_message = update.message or update.callback_query.message
 
-    await target_message.reply_text(
+    await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
-        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})",
+        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
+        f"Here's your referral link: {link}\n"
+        f"Share this with your friends to earn points! 🎯",
         reply_markup=reply_markup
     )
 
@@ -618,7 +621,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     balance = user_balances.get(user_id, 0)
     if balance < MIN_WITHDRAWAL:
         target_message = update.message or update.callback_query.message
-        await target_message.reply_text(
+        await target_message.edit_text(
             f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
             f"Your current balance: {balance} points (₦{balance})",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
@@ -628,7 +631,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     # Start withdrawal process
     user_withdrawal_state[user_id] = {'stage': 'account_number'}
     target_message = update.message or update.callback_query.message
-    await target_message.reply_text(
+    await target_message.edit_text(
         "Please enter your Account Number (10 digits):",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
     )
@@ -653,7 +656,8 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
+    target_message = update.message or update.callback_query.message
+    await target_message.edit_text(
         "Please select your Bank:",
         reply_markup=reply_markup
     )
