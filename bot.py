@@ -610,7 +610,7 @@ async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# Fix the withdrawal process to ensure it registers the account number and asks for bank name and the rest in button form
+# Enhance the withdrawal process to use buttons for all steps and include a back button
 async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -620,7 +620,8 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
         target_message = update.message or update.callback_query.message
         await target_message.reply_text(
             f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
-            f"Your current balance: {balance} points (₦{balance})"
+            f"Your current balance: {balance} points (₦{balance})",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return
 
@@ -628,7 +629,8 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     user_withdrawal_state[user_id] = {'stage': 'account_number'}
     target_message = update.message or update.callback_query.message
     await target_message.reply_text(
-        "Please enter your Account Number (10 digits):"
+        "Please enter your Account Number (10 digits):",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
     )
     return ACCOUNT_NUMBER
 
@@ -639,13 +641,15 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     # Validate account number (10 digits for Nigerian banks)
     if not account_number.isdigit() or len(account_number) != 10:
         await update.message.reply_text(
-            "❌ Invalid account number! Please enter a valid 10-digit account number."
+            "❌ Invalid account number! Please enter a valid 10-digit account number.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ACCOUNT_NUMBER
 
     # Store account number and ask for bank name
     user_withdrawal_state[user_id]['account_number'] = account_number
     keyboard = [[InlineKeyboardButton(bank, callback_data=f'bank_{bank}')] for bank in BANKS]
+    keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
@@ -668,7 +672,8 @@ async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TY
     user_withdrawal_state[user_id]['bank'] = bank
     await query.answer()
     await query.message.reply_text(
-        "Please enter your Account Name (as shown in your bank):"
+        "Please enter your Account Name (as shown in your bank):",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
     )
     return ACCOUNT_NAME
 
@@ -678,7 +683,8 @@ async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if len(account_name) < 3:
         await update.message.reply_text(
-            "❌ Please enter a valid account name!"
+            "❌ Please enter a valid account name!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ACCOUNT_NAME
 
@@ -687,7 +693,7 @@ async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     balance = user_balances.get(user_id, 0)
     keyboard = [
         [InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}') for amount in WITHDRAWAL_AMOUNTS if amount <= balance],
-        [InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
 
     await update.message.reply_text(
@@ -1053,7 +1059,7 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-# Add a top referral button to show the top 5 referrals
+# Register the top referral command button
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
     message = "🏆 Top 5 Referrers:\n\n"
