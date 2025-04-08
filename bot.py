@@ -1060,7 +1060,7 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-# Register the top referral command button
+# Fix the AttributeError in show_top_referrals by using callback_query.message if update.message is None
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
     message = "🏆 Top 5 Referrers:\n\n"
@@ -1072,7 +1072,11 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
         message += "No referrals yet!"
 
     keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # Use callback_query.message if update.message is None
+    target_message = update.message or update.callback_query.message
+
+    await target_message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Add a function to clean expired coupons periodically
 async def clean_expired_coupons():
