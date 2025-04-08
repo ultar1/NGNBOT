@@ -34,7 +34,7 @@ REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
 # Constants
-WELCOME_BONUS = 100  # ₦100
+WELCOME_BONUS = 50  # ₦50
 REFERRAL_BONUS = 80  # Changed from 70 to 80
 DAILY_BONUS = 25  # ₦25
 TOP_REFERRER_BONUS = 1000  # ₦1000 weekly bonus for top 5 referrers
