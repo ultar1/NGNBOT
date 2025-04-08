@@ -598,11 +598,22 @@ async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await show_join_message(update, context)
         return
 
-    # Check if photo is attached
-    if not update.message.photo:
+    # Check if command is replying to a message with photo
+    reply_to_message = update.message.reply_to_message
+    photo = None
+    
+    if reply_to_message and reply_to_message.photo:
+        # Use the photo from the replied message
+        photo = reply_to_message.photo[-1]
+    elif update.message.photo:
+        # Use directly attached photo
+        photo = update.message.photo[-1]
+    
+    if not photo:
         await update.message.reply_text(
-            "❌ Please send a screenshot of your completed task!\n"
-            "Usage: Send the /task command with a screenshot attached"
+            "❌ Please either:\n"
+            "1. Attach a screenshot with the /task command, or\n"
+            "2. Reply to a screenshot with the /task command"
         )
         return
 
@@ -619,7 +630,7 @@ async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Forward screenshot to admin
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
-            photo=update.message.photo[-1].file_id,
+            photo=photo.file_id,
             caption=admin_message + f"\n\nUse /approve_task {user.id} to approve\nUse /reject_task {user.id} to reject"
         )
 
