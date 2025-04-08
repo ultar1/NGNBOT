@@ -514,8 +514,20 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
     # Mark user as verified
     user_verified_status[user_id] = True
     
-    # Handle verification completion (includes welcome bonus and referral processing)
-    await handle_verification_complete(update, context, user_id)
+    # Handle welcome bonus for new users only
+    if user_id not in user_balances:
+        print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user_id}")
+        user_balances[user_id] = WELCOME_BONUS
+        referrals[user_id] = set()
+        await query.message.reply_text(
+            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+        )
+    
+    # Process any pending referrals
+    await process_pending_referral(user_id, context)
+    
+    # Show dashboard
+    await show_dashboard(update, context)
     return
 
 async def can_withdraw_today(user_id: int) -> bool:
