@@ -1290,6 +1290,119 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Rest of the button handlers...
 
+async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task submission with screenshot"""
+    user = update.effective_user
+
+    # Check membership
+    is_member = await check_membership(user.id, context)
+    if not is_member:
+        await show_join_message(update, context)
+        return
+
+    # Check if command is replying to a message with photo
+    reply_to_message = update.message.reply_to_message
+    photo = None
+    
+    if reply_to_message and reply_to_message.photo:
+        # Use the photo from the replied message
+        photo = reply_to_message.photo[-1]
+    elif update.message.photo:
+        # Use directly attached photo
+        photo = update.message.photo[-1]
+    
+    if not photo:
+        await update.message.reply_text(
+            "❌ Please either:\n"
+            "1. Attach a screenshot with the /task command, or\n"
+            "2. Reply to a screenshot with the /task command"
+        )
+        return
+
+    try:
+        # Notify admin about the submission
+        admin_message = (
+            f"📝 New Task Submission!\n\n"
+            f"From User:\n"
+            f"• ID: {user.id}\n"
+            f"• Username: @{user.username if user.username else 'None'}\n"
+            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}"
+        )
+
+        # Forward screenshot to admin
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=photo.file_id,
+            caption=admin_message + f"\n\nUse /approve_task {user.id} to approve\nUse /reject_task {user.id} to reject"
+        )
+
+        await update.message.reply_text(
+            "✅ Your task screenshot has been submitted for review!\n"
+            "You will receive your reward once approved."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            "❌ Error submitting task. Please try again later."
+        )
+
+async def handle_task_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task approval by admin"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /approve_task <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        
+        # Add reward to user's balance
+        user_balances[target_user_id] = user_balances.get(target_user_id, 0) + TASK_REWARD
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=f"🎉 Your task has been approved!\n"
+                 f"Added ₦{TASK_REWARD} to your balance."
+        )
+        
+        await update.message.reply_text(f"✅ Task approved for user {target_user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+async def handle_task_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task rejection by admin"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /reject_task <user_id> [reason]")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        reason = ' '.join(context.args[1:]) if len(context.args) > 1 else "No reason provided"
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=f"❌ Your task has been rejected.\n"
+                 f"Reason: {reason}"
+        )
+        
+        await update.message.reply_text(f"✅ Task rejected for user {target_user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv('BOT_TOKEN')
@@ -1331,7 +1444,9 @@ def main():
             CallbackQueryHandler(button_handler, pattern='^back_to_menu$'),
             CommandHandler('start', start)
         ],
-        allow_reentry=True
+        allow_reentry=True,
+        name="withdrawal_conversation",
+        persistent=False
     )
 
     # Create payment screenshot handler
@@ -1341,27 +1456,28 @@ def main():
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
         },
         fallbacks=[CommandHandler('start', start)],
-        name="payment_screenshot_conversation"
+        name="payment_screenshot_conversation",
+        persistent=False
     )
 
-    # Register all handlers in correct order
+    # Register conversation handlers first
     application.add_handler(withdrawal_handler)
     application.add_handler(payment_handler)
     
-    # Basic command handlers
+    # Register command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
     application.add_handler(CommandHandler("chatid", get_chat_id))
     application.add_handler(CommandHandler("generate", handle_generate_command))
     application.add_handler(CommandHandler("redeem", handle_redeem_command))
     application.add_handler(CommandHandler("task", handle_task_command))
-    application.add_handler(CommandHandler("approve_task", handle_approve_task))
-    application.add_handler(CommandHandler("reject_task", handle_reject_task))
+    application.add_handler(CommandHandler("approve_task", handle_task_approval))
+    application.add_handler(CommandHandler("reject_task", handle_task_rejection))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     
-    # General message and button handlers
+    # Register message and button handlers last
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
