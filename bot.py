@@ -34,8 +34,8 @@ REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
 # Constants
-WELCOME_BONUS = 50  # ₦50
-REFERRAL_BONUS = 80  # Changed from 70 to 80
+WELCOME_BONUS = 50  # Changed from 100 to 50
+REFERRAL_BONUS = 80  # Keep at 80
 DAILY_BONUS = 25  # ₦25
 TOP_REFERRER_BONUS = 1000  # ₦1000 weekly bonus for top 5 referrers
 MIN_WITHDRAWAL = 500  # ₦500 minimum withdrawal
@@ -180,30 +180,60 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
         print(f"Failed to send admin notification: {e}")
 
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Process pending referral after verification"""
     if user_id in pending_referrals:
         referrer_id = pending_referrals[user_id]
-        if referrer_id != user_id and referrer_id in referrals:
+        
+        # Initialize referrals set if not exists
+        if referrer_id not in referrals:
+            referrals[referrer_id] = set()
+            
+        if referrer_id != user_id:  # Prevent self-referral
+            # Add to referrals and credit bonus
             referrals[referrer_id].add(user_id)
             user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
             
-            # Notify admin about the new verified user
-            await notify_admin_new_user(user_id, None, referrer_id, context)
-            
             try:
+                # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"🎉 Your referral has been verified! You earned {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})!"
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
                 )
+                
+                # Notify new user
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"✅ You've been verified! Your referrer earned {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})!"
+                    text=f"✅ Verification complete! Your referrer earned ₦{REFERRAL_BONUS}!"
                 )
-            except:
-                pass
-        else:
-            # If no referrer, still notify admin about new user
-            await notify_admin_new_user(user_id, None, None, context)
-            
+                
+                # Notify admin with user details
+                try:
+                    user = await context.bot.get_chat(user_id)
+                    referrer = await context.bot.get_chat(referrer_id)
+                    
+                    admin_message = (
+                        "🆕 New User Verified!\n\n"
+                        f"👤 New User:\n"
+                        f"• ID: {user_id}\n"
+                        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
+                        f"• Username: @{user.username if user.username else 'None'}\n\n"
+                        f"👥 Referred By:\n"
+                        f"• ID: {referrer_id}\n"
+                        f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
+                        f"• Username: @{referrer.username if referrer.username else 'None'}\n"
+                        f"• Total Referrals: {len(referrals[referrer_id])}"
+                    )
+                    
+                    await context.bot.send_message(
+                        chat_id=ADMIN_ID,
+                        text=admin_message
+                    )
+                except Exception as e:
+                    print(f"Failed to send admin notification: {e}")
+            except Exception as e:
+                print(f"Error in referral notification: {e}")
+        
+        # Clean up
         del pending_referrals[user_id]
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -374,7 +404,7 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+        f"Your Telegram Name: {user.first_name} {user.last_name if your.last_name else ''}\n\n"
         f"🔗 Your Referral Link:\n{referral_link}\n\n"
         f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
         reply_markup=reply_markup
@@ -514,9 +544,12 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     user_id = query.from_user.id
     
+    print(f"Starting withdrawal process for user {user_id}")  # Add debug logging
+    
     # First check user's membership
     is_member = await check_membership(user_id, context)
     if not is_member:
+        print(f"User {user_id} is not a member")  # Add debug logging
         await query.message.edit_text(
             "❌ You must be a member of our channel and group to withdraw!\n"
             "Please join and try again.",
@@ -524,15 +557,13 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
         )
         return ConversationHandler.END
     
-    # Check referrals' membership
-    all_members, not_in_channel = await verify_referrals_membership(user_id, context)
-    if not all_members:
-        referral_list = "\n".join([f"• User ID: {uid}" for uid in not_in_channel])
+    # Check balance first
+    balance = user_balances.get(user_id, 0)
+    if balance < MIN_WITHDRAWAL:
+        print(f"User {user_id} has insufficient balance: {balance}")  # Add debug logging
         await query.message.edit_text(
-            "❌ Some of your referrals are not in the channel/group!\n\n"
-            "The following referrals need to join:\n"
-            f"{referral_list}\n\n"
-            "Please ask them to join before withdrawing.",
+            f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
+            f"Your current balance: {balance} points (₦{balance})",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ConversationHandler.END
@@ -548,6 +579,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
             [InlineKeyboardButton("📝 New Account", callback_data='new_account')],
             [InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]
         ]
+        print(f"User {user_id} has saved bank details")  # Add debug logging
         await query.message.edit_text(
             f"Found saved bank details:\nBank: {saved_info['bank']}\nAccount: {saved_info['account_number']}\n\nWould you like to use this account?",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -555,15 +587,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
         return ACCOUNT_NUMBER
     
     # No saved details, proceed with normal flow
-    balance = user_balances.get(user_id, 0)
-    if balance < MIN_WITHDRAWAL:
-        await query.message.edit_text(
-            f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
-            f"Your current balance: {balance} points (₦{balance})",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-        )
-        return ConversationHandler.END
-    
+    print(f"User {user_id} needs to enter bank details")  # Add debug logging
     await query.message.edit_text(
         "Please enter your account number (10 digits):",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
@@ -1224,6 +1248,12 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(user.id):
         await update.message.reply_text("❌ This command is only for admins!")
         return
+        
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"Current chat ID: {chat_id}")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle normal text messages"""
         
     chat_id = update.effective_chat.id
     await update.message.reply_text(f"Current chat ID: {chat_id}")
