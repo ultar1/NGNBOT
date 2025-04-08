@@ -482,9 +482,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def escape_markdown(text: str) -> str:
     """Escape special characters for MarkdownV2"""
     special_chars = ['_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    escaped_text = text
     for char in special_chars:
-        text = text.replace(char, f'\\{char}')
-    return text
+        escaped_text = escaped_text.replace(char, f'\\{char}')
+    return escaped_text
 
 # Fix the task button to ensure it works correctly
 async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1057,13 +1058,20 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
         }
         used_coupons[code] = []
 
-        await update.message.reply_text(
+        # Properly escape the code for MarkdownV2
+        escaped_code = escape_markdown(code)
+
+        message = (
             f"✅ Generated new coupon code:\n\n"
-            f"Code: `{escape_markdown(code)}`\n"
+            f"Code: `{escaped_code}`\n"
             f"Amount: ₦{amount}\n"
-            f"Expires: {expiration_time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"Expires: {escape_markdown(expiration_time.strftime('%Y-%m-%d %H:%M:%S'))}\n\n"
             f"Users can redeem this code using:\n"
-            f"/redeem {escape_markdown(code)}",
+            f"/redeem {escaped_code}"
+        )
+
+        await update.message.reply_text(
+            message,
             parse_mode='MarkdownV2'
         )
     except ValueError:
