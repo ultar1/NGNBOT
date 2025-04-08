@@ -188,7 +188,11 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
         if referrer_id not in referrals:
             referrals[referrer_id] = set()
             
-        if referrer_id != user_id:  # Prevent self-referral
+        # Check if this is not a self-referral and user hasn't been referred before
+        if (referrer_id != user_id and  # Prevent self-referral
+            user_id not in referrals[referrer_id] and  # Not already referred by this user
+            not any(user_id in refs for refs in referrals.values())):  # Not referred by anyone else
+            
             # Add to referrals and credit bonus
             referrals[referrer_id].add(user_id)
             user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
@@ -206,34 +210,12 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
                     text=f"✅ Verification complete! Your referrer earned ₦{REFERRAL_BONUS}!"
                 )
                 
-                # Notify admin with user details
-                try:
-                    user = await context.bot.get_chat(user_id)
-                    referrer = await context.bot.get_chat(referrer_id)
-                    
-                    admin_message = (
-                        "🆕 New User Verified!\n\n"
-                        f"👤 New User:\n"
-                        f"• ID: {user_id}\n"
-                        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
-                        f"• Username: @{user.username if user.username else 'None'}\n\n"
-                        f"👥 Referred By:\n"
-                        f"• ID: {referrer_id}\n"
-                        f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
-                        f"• Username: @{referrer.username if referrer.username else 'None'}\n"
-                        f"• Total Referrals: {len(referrals[referrer_id])}"
-                    )
-                    
-                    await context.bot.send_message(
-                        chat_id=ADMIN_ID,
-                        text=admin_message
-                    )
-                except Exception as e:
-                    print(f"Failed to send admin notification: {e}")
+                # Notify admin
+                await notify_admin_verified_user(user_id, referrer_id, context)
             except Exception as e:
                 print(f"Error in referral notification: {e}")
         
-        # Clean up
+        # Clean up pending referral
         del pending_referrals[user_id]
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -432,15 +414,25 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Update the start command to show channel and group buttons if the user isn't in them
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-
+    
+    # Store referral info if this is a referred user and they haven't been referred before
+    if context.args and len(context.args) > 0:
+        try:
+            referrer_id = int(context.args[0])
+            if (referrer_id != user.id and  # Prevent self-referral
+                not any(user.id in refs for refs in referrals.values())):  # Not already referred
+                pending_referrals[user.id] = referrer_id
+        except ValueError:
+            pass
+    
     # Check if user needs CAPTCHA verification
-    if not user.id in user_balances and not user.id in user_captcha:
+    if user.id not in user_balances and user.id not in user_captcha:
         await send_captcha(update, context, user.id)
         return
     
     # If user has pending CAPTCHA, verify it
     if user.id in user_captcha:
-        if update.message.text.startswith('/start'):
+        if update.message and update.message.text and update.message.text.startswith('/start'):
             await update.message.reply_text(
                 "❌ Please complete the CAPTCHA verification first!\n"
                 "Enter the code shown above."
@@ -459,26 +451,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "❌ Too many failed attempts. Please start over with /start"
                 )
             return
-
-        # After successful CAPTCHA, show join message
-        await update.message.reply_text("✅ CAPTCHA verified successfully!")
-        await show_join_message(update, context)
+        
+        # After successful CAPTCHA
+        await handle_verification_complete(update, context, user.id)
         return
 
     # Initialize verified status if new user
     if user.id not in user_verified_status:
         user_verified_status[user.id] = False
-
-    is_existing_user = user.id in user_balances
-
-    # Store referral info if this is a referred user
-    if context.args and len(context.args) > 0:
-        try:
-            referrer_id = int(context.args[0])
-            if referrer_id != user.id:
-                pending_referrals[user.id] = referrer_id
-        except ValueError:
-            pass
 
     # Check membership status
     is_member = await check_membership(user.id, context)
@@ -487,7 +467,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Handle new users after verification
-    if not is_existing_user:
+    if user.id not in user_balances:
         print(f"Adding welcome bonus of {WELCOME_BONUS} to user {user.id}")  # Debug log
         user_balances[user.id] = WELCOME_BONUS
         referrals[user.id] = set()
@@ -1577,32 +1557,29 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
         print(f"Failed to send admin notification: {e}")
 
 async def handle_verification_complete(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """Handle user verification completion"""
-    print(f"Handling verification completion for user {user_id}")
-    
-    # Only show join message after CAPTCHA, don't do anything else yet
+    """Handle user verification completion after CAPTCHA"""
     keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+        [
+            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+            InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
+        ],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     message_text = (
-        "⚠️ You must join our channel and group to use this bot!\n\n"
+        "✅ CAPTCHA verified successfully!\n\n"
+        "To complete registration:\n"
         "1. Join our channel\n"
         "2. Join our group\n"
-        "3. Click 'Check Membership' button"
+        "3. Click 'Verify Membership' button"
     )
-
-    # Handle different update types
-    if isinstance(update, Update):
-        if update.callback_query:
-            await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
-        else:
-            await update.message.reply_text(message_text, reply_markup=reply_markup)
+    
+    # Handle different update types properly
+    if update.callback_query:
+        await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
     else:
-        await update.edit_text(message_text, reply_markup=reply_markup)
+        await update.message.reply_text(message_text, reply_markup=reply_markup)
 
 def main():
     # Get environment variables with fallbacks
