@@ -1288,7 +1288,78 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_verify_membership(update, context)
         return
 
-    # Rest of the button handlers...
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            await query.answer("✅ Membership verified!")
+            await show_dashboard(update, context)
+        else:
+            await query.answer("❌ Please join both the channel and group!")
+            await show_join_message(query.message, context)
+        return
+
+    # Check membership for other actions
+    is_member = await check_membership(user_id, context)
+    if not is_member:
+        await query.answer("❌ Please join our channel and group first!")
+        await show_join_message(query.message, context)
+        return
+
+    if query.data == 'back_to_menu':
+        await query.answer("🔙 Returning to main menu...")
+        await show_dashboard(update, context)
+        return
+
+    elif query.data == 'my_referrals':
+        await query.answer()
+        await show_referral_menu(update, context)
+        return
+
+    elif query.data == 'top_referrals':
+        await query.answer()
+        await show_top_referrals(update, context)
+        return
+
+    elif query.data == 'daily_bonus':
+        daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
+        if daily_bonus_earned:
+            await query.answer("✅ Daily bonus credited!")
+            await query.message.edit_text(
+                f"🎉 You have received your daily bonus of {DAILY_BONUS} points (₦{DAILY_BONUS})!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+            )
+        else:
+            await query.answer("❌ You have already claimed your daily bonus today!")
+        return
+
+    elif query.data == 'balance':
+        balance = user_balances.get(user_id, 0)
+        await query.answer()
+        await query.message.edit_text(
+            f"Your current balance: {balance} points (₦{balance}) 💰",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+        return
+
+    elif query.data == 'tasks':
+        await handle_tasks_button(update, context)
+        return
+
+    elif query.data == 'use_saved_account':
+        saved_info = user_bank_info.get(user_id)
+        if saved_info:
+            context.user_data['withdrawal'] = saved_info.copy()
+            await handle_amount_selection(update, context)
+        return
+
+    elif query.data == 'new_account':
+        await query.message.edit_text(
+            "Please enter your account number (10 digits):",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
+        )
+        return ACCOUNT_NUMBER
+
+    await query.answer("❌ Unknown action.")
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
