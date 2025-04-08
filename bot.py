@@ -1514,10 +1514,13 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.callback_query.message.edit_text(
         "📝 Task Instructions:\n\n"
         "1. Join our channel and group\n"
-        "2. Share your referral link\n"
-        "3. Take a screenshot when someone joins using your link\n"
+        "2. Share your referral link on any social media\n"
+        "3. Take a screenshot showing:\n"
+        "   • Your post with the referral link, OR\n"
+        "   • Your content/review about our bot\n"
         "4. Send the screenshot using /task command\n\n"
-        f"Reward: ₦{TASK_REWARD} per approved task",
+        f"Reward: ₦{TASK_REWARD} per approved task\n\n"
+        "Note: Your task will be reviewed and approved by admin",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1555,48 +1558,68 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
 
 async def handle_verification_complete(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     """Handle user verification completion"""
-    if user_id not in user_balances:
-        # New user - add welcome bonus
+    print(f"Handling verification completion for user {user_id}")  # Debug log
+    
+    # Check if this is a new user
+    is_new_user = user_id not in user_balances
+    
+    if is_new_user:
+        print(f"New user detected: {user_id}")  # Debug log
+        # Add welcome bonus
         user_balances[user_id] = WELCOME_BONUS
+        print(f"Added welcome bonus: {WELCOME_BONUS}")  # Debug log
+        
+        # Initialize referrals set
         referrals[user_id] = set()
+        
+        try:
+            # Send welcome message
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎉 Welcome! You've received ₦{WELCOME_BONUS} as a welcome bonus!"
+            )
+            print(f"Sent welcome message to {user_id}")  # Debug log
+        except Exception as e:
+            print(f"Failed to send welcome message: {e}")
         
         # Process referral if exists
         referrer_id = pending_referrals.get(user_id)
+        print(f"Referrer ID for {user_id}: {referrer_id}")  # Debug log
+        
         if referrer_id and referrer_id != user_id:
-            # Credit referral bonus
-            referrals[referrer_id] = referrals.get(referrer_id, set())
-            referrals[referrer_id].add(user_id)
-            user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
-            
-            # Notify referrer
+            print(f"Processing referral: {referrer_id} referred {user_id}")  # Debug log
             try:
+                # Add to referrals list and credit bonus
+                if referrer_id not in referrals:
+                    referrals[referrer_id] = set()
+                referrals[referrer_id].add(user_id)
+                
+                # Credit referral bonus
+                user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
+                print(f"Credited referral bonus to {referrer_id}")  # Debug log
+                
+                # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
                     text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
                 )
+                print(f"Notified referrer {referrer_id}")  # Debug log
             except Exception as e:
-                print(f"Failed to notify referrer: {e}")
+                print(f"Error processing referral: {e}")
             
-            # Clean up
-            del pending_referrals[user_id]
-            
-            # Notify admin about verified user
+            # Notify admin
             await notify_admin_verified_user(user_id, referrer_id, context)
         else:
             # Notify admin about direct join
             await notify_admin_verified_user(user_id, None, context)
-        
-        # Send welcome message
-        try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-            )
-        except Exception as e:
-            print(f"Failed to send welcome message: {e}")
+            
+        # Clean up pending referral
+        if user_id in pending_referrals:
+            del pending_referrals[user_id]
     
     # Show dashboard
-    await show_dashboard(update, context)
+    if isinstance(update, Update):
+        await show_dashboard(update, context)
 
 def main():
     # Get environment variables with fallbacks
@@ -1621,9 +1644,6 @@ def main():
         states={
             ACCOUNT_NUMBER: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
-                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
-                CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
-                CallbackQueryHandler(handle_amount_selection, pattern="^amount_")
             ],
             BANK_NAME: [
                 CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
