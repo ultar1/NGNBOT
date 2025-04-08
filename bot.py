@@ -291,10 +291,11 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             reply_markup=reply_markup
         )
 
-# Update the referral menu to include the user's Telegram name
+# Update the referral menu to include the user's referral link
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ref_count = len(referrals.get(user.id, set()))
+    referral_link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
 
     keyboard = [
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
@@ -307,7 +308,9 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}",
+        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+        f"🔗 Your Referral Link:\n{referral_link}\n\n"
+        f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
         reply_markup=reply_markup
     )
 
