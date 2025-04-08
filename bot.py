@@ -65,16 +65,8 @@ used_coupons = {}    # Format: {code: [user_ids]}
     ACCOUNT_NUMBER,
     BANK_NAME,
     ACCOUNT_NAME,
-    PAYMENT_SCREENSHOT,
+    AMOUNT_SELECTION
 ) = range(4)
-
-# Define withdrawal states
-WITHDRAWAL_STATES = {
-    'ACCOUNT_NUMBER': 1,
-    'BANK_NAME': 2,
-    'ACCOUNT_NAME': 3,
-    'AMOUNT': 4
-}
 
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
@@ -622,6 +614,7 @@ async def handle_reject_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Handle withdrawal process
 async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start the withdrawal process"""
     query = update.callback_query
     user_id = query.from_user.id
     
@@ -634,34 +627,33 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ConversationHandler.END
-        
-    # Initialize withdrawal state
+    
+    # Store initial withdrawal data
     context.user_data['withdrawal'] = {}
     
     await query.message.edit_text(
-        "Enter your Account Number (10 digits):\n\n"
-        "Type your account number here...",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]])
+        "Please enter your account number (10 digits):",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
     )
-    return WITHDRAWAL_STATES['ACCOUNT_NUMBER']
+    return ACCOUNT_NUMBER
 
 async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle account number input"""
     user_id = update.effective_user.id
-    if not update.message or not update.message.text:
-        return WITHDRAWAL_STATES['ACCOUNT_NUMBER']
-        
     account_number = update.message.text.strip()
     
+    # Validate account number
     if not account_number.isdigit() or len(account_number) != 10:
         await update.message.reply_text(
-            "❌ Invalid account number! Please enter a valid 10-digit account number."
+            "❌ Invalid account number! Please enter a valid 10-digit account number.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
         )
-        return WITHDRAWAL_STATES['ACCOUNT_NUMBER']
+        return ACCOUNT_NUMBER
     
     # Save account number
     context.user_data['withdrawal']['account_number'] = account_number
     
-    # Show bank selection buttons
+    # Create bank selection keyboard
     keyboard = []
     row = []
     for bank in BANKS:
@@ -671,51 +663,48 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
             row = []
     if row:
         keyboard.append(row)
-    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')])
+    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')])
     
     await update.message.reply_text(
         "Select your bank:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    return WITHDRAWAL_STATES['BANK_NAME']
+    return BANK_NAME
 
-async def handle_bank_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_bank_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle bank selection"""
     query = update.callback_query
-    user_id = query.from_user.id
+    if not query:
+        return BANK_NAME
     
-    if query.data == 'back_to_menu':
-        if 'withdrawal' in context.user_data:
-            del context.user_data['withdrawal']
-        await show_dashboard(update, context)
-        return ConversationHandler.END
+    if query.data == 'cancel_withdrawal':
+        return await cancel_withdrawal(update, context)
     
     bank = query.data.replace('bank_', '')
-    
     if bank not in BANKS:
         await query.answer("❌ Invalid bank selection!")
-        return WITHDRAWAL_STATES['BANK_NAME']
+        return BANK_NAME
     
     # Save bank selection
     context.user_data['withdrawal']['bank'] = bank
     
     await query.message.edit_text(
-        "Enter your Account Name (as shown in your bank):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]])
+        "Enter your account name (as shown in your bank):",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
     )
-    return WITHDRAWAL_STATES['ACCOUNT_NAME']
+    return ACCOUNT_NAME
 
 async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle account name input"""
     user_id = update.effective_user.id
-    if not update.message or not update.message.text:
-        return WITHDRAWAL_STATES['ACCOUNT_NAME']
-    
     account_name = update.message.text.strip()
     
     if len(account_name) < 3:
         await update.message.reply_text(
-            "❌ Invalid account name! Please enter your full account name."
+            "❌ Invalid account name! Name must be at least 3 characters long.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
         )
-        return WITHDRAWAL_STATES['ACCOUNT_NAME']
+        return ACCOUNT_NAME
     
     # Save account name
     context.user_data['withdrawal']['account_name'] = account_name
@@ -723,37 +712,35 @@ async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Show amount selection
     balance = user_balances.get(user_id, 0)
     keyboard = []
+    amounts = [amount for amount in WITHDRAWAL_AMOUNTS if amount <= balance]
     row = []
-    for amount in WITHDRAWAL_AMOUNTS:
-        if amount <= balance:
-            row.append(InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}'))
-            if len(row) == 2:
-                keyboard.append(row)
-                row = []
+    for amount in amounts:
+        row.append(InlineKeyboardButton(f"₦{amount}", callback_data=f'amount_{amount}'))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
     if row:
         keyboard.append(row)
-    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')])
+    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')])
     
     await update.message.reply_text(
-        f"💰 Select withdrawal amount:\nYour balance: ₦{balance}",
+        f"Select withdrawal amount:\nYour balance: ₦{balance}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    return WITHDRAWAL_STATES['AMOUNT']
+    return AMOUNT_SELECTION
 
 async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle amount selection"""
     query = update.callback_query
     user_id = query.from_user.id
     
-    if query.data == 'back_to_menu':
-        if 'withdrawal' in context.user_data:
-            del context.user_data['withdrawal']
-        await show_dashboard(update, context)
-        return ConversationHandler.END
+    if query.data == 'cancel_withdrawal':
+        return await cancel_withdrawal(update, context)
     
-    amount = int(query.data.replace('withdraw_amount_', ''))
+    amount = int(query.data.replace('amount_', ''))
     withdrawal_data = context.user_data.get('withdrawal', {})
     
-    # Verify amount and process withdrawal
+    # Verify amount
     balance = user_balances.get(user_id, 0)
     if amount > balance:
         await query.message.edit_text(
@@ -766,10 +753,8 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     user_balances[user_id] = balance - amount
     last_withdrawal[user_id] = datetime.now().date()
     
-    # Save withdrawal amount
+    # Save amount and notify admin
     withdrawal_data['amount'] = amount
-    
-    # Notify admin
     await notify_withdrawal_request(user_id, amount, withdrawal_data, context)
     
     # Show confirmation
@@ -786,7 +771,25 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     )
     
     # Clear withdrawal data
-    del context.user_data['withdrawal']
+    context.user_data.pop('withdrawal', None)
+    return ConversationHandler.END
+
+async def cancel_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel the withdrawal process"""
+    query = update.callback_query
+    if query:
+        await query.message.edit_text(
+            "Withdrawal cancelled.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+    else:
+        await update.message.reply_text(
+            "Withdrawal cancelled.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+    
+    # Clear withdrawal data
+    context.user_data.pop('withdrawal', None)
     return ConversationHandler.END
 
 async def notify_withdrawal_request(user_id: int, amount: int, account_info: dict, context: ContextTypes.DEFAULT_TYPE):
@@ -1228,31 +1231,35 @@ def main():
 
     application = Application.builder().token(token).build()
 
-    # Update the withdrawal conversation handler
+    # Update withdrawal conversation handler registration in main()
     withdrawal_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(button_handler, pattern='^withdraw$')],
+        entry_points=[
+            CallbackQueryHandler(handle_withdrawal_start, pattern='^withdraw$')
+        ],
         states={
-            WITHDRAWAL_STATES['ACCOUNT_NUMBER']: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
-                CallbackQueryHandler(button_handler, pattern='^back_to_menu$')
+            ACCOUNT_NUMBER: [
+                MessageHandler(filters.Text & ~filters.Command(), handle_account_number),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
-            WITHDRAWAL_STATES['BANK_NAME']: [
-                CallbackQueryHandler(handle_bank_selection, pattern='^bank_'),
-                CallbackQueryHandler(button_handler, pattern='^back_to_menu$')
+            BANK_NAME: [
+                CallbackQueryHandler(handle_bank_name, pattern='^bank_'),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
-            WITHDRAWAL_STATES['ACCOUNT_NAME']: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
-                CallbackQueryHandler(button_handler, pattern='^back_to_menu$')
+            ACCOUNT_NAME: [
+                MessageHandler(filters.Text & ~filters.Command(), handle_account_name),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
-            WITHDRAWAL_STATES['AMOUNT']: [
-                CallbackQueryHandler(handle_amount_selection, pattern='^withdraw_amount_'),
-                CallbackQueryHandler(button_handler, pattern='^back_to_menu$')
+            AMOUNT_SELECTION: [
+                CallbackQueryHandler(handle_amount_selection, pattern='^amount_'),
+                CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ]
         },
         fallbacks=[
-            CommandHandler('start', start),
-            CallbackQueryHandler(button_handler, pattern='^back_to_menu$')
+            CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$'),
+            CallbackQueryHandler(button_handler, pattern='^back_to_menu$'),
+            CommandHandler('start', start)
         ],
+        allow_reentry=True,
         name="withdrawal_conversation",
         persistent=False
     )
@@ -1268,7 +1275,12 @@ def main():
         persistent=False
     )
 
-    # Add all handlers
+    # Update the handler order in main()
+    # Add the withdrawal handler first to ensure it captures messages properly
+    application.add_handler(withdrawal_handler)
+    
+    # Then add other handlers
+    application.add_handler(payment_handler)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", get_user_info))
     application.add_handler(CommandHandler("chatid", get_chat_id))
@@ -1277,12 +1289,10 @@ def main():
     application.add_handler(CommandHandler("task", handle_task_command))
     application.add_handler(CommandHandler("approve_task", handle_approve_task))
     application.add_handler(CommandHandler("reject_task", handle_reject_task))
-    application.add_handler(withdrawal_handler)
-    application.add_handler(payment_handler)
-    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Set up webhook with proper error handling and configuration
