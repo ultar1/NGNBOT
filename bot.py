@@ -1614,7 +1614,7 @@ def main():
         ],
         states={
             ACCOUNT_NUMBER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
             ],
             BANK_NAME: [
                 CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
@@ -1628,27 +1628,21 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        ],
+        },
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
             CommandHandler("start", start)
-        ],
-        allow_reentry=True,
-        name="withdrawal_conversation",
-        persistent=False
+        ]
     )
 
-    # Rest of the handlers...
-    # Define payment handler
+    # Payment handler for admin payment confirmation
     payment_handler = ConversationHandler(
         entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        ],
-        fallbacks=[CommandHandler("start", start)],
-        name="payment_screenshot_conversation",
-        persistent=False
+        },
+        fallbacks=[CommandHandler("start", start)]
     )
 
     print("Registering handlers...")
