@@ -1544,7 +1544,7 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    webhook_base_url = "https://ngnbot-976310dc7194.herokuapp.com"  # Use direct webhook URL
+    webhook_base_url = "https://ngnbot-976310dc7194.herokuapp.com"
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
@@ -1554,17 +1554,18 @@ def main():
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Rest of handler definitions...
-    # Define withdrawal handler
+    # Define withdrawal handler first
     withdrawal_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$")
+            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
+            CallbackQueryHandler(handle_bank_name, pattern="^bank_")
         ],
         states={
             ACCOUNT_NUMBER: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
-                CallbackQueryHandler(handle_bank_name, pattern="^bank_")
+                CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
+                CallbackQueryHandler(handle_amount_selection, pattern="^amount_")
             ],
             BANK_NAME: [
                 CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
@@ -1589,6 +1590,7 @@ def main():
         persistent=False
     )
 
+    # Rest of the handlers...
     # Define payment handler
     payment_handler = ConversationHandler(
         entry_points=[CommandHandler("paid", handle_paid_command)],
