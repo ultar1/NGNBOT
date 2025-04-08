@@ -732,28 +732,16 @@ async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TY
     user_withdrawal_state[user_id] = user_data
     
     # Show amount selection buttons
-    balance = user_balances.get(user_id, 0)
-    keyboard = []
-    row = []
-    
-    for amount in WITHDRAWAL_AMOUNTS:
-        if amount <= balance:
-            row.append(InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}'))
-            if len(row) == 2:  # Two buttons per row
-                keyboard.append(row)
-                row = []
-    
-    if row:  # Add remaining buttons
-        keyboard.append(row)
-    
-    keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')])
+    keyboard = [
+        [InlineKeyboardButton(f"₦{amount}", callback_data=f'withdraw_amount_{amount}') for amount in WITHDRAWAL_AMOUNTS],
+        [InlineKeyboardButton("🔙 Cancel", callback_data='back_to_menu')]
+    ]
     
     await update.message.reply_text(
-        f"💰 Select withdrawal amount:\n"
-        f"Your balance: ₦{balance}",
+        f"💰 Select withdrawal amount:\nYour balance: ₦{user_balances.get(user_id, 0)}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    return 'SELECT_AMOUNT'  # New state for amount selection
+    return 'SELECT_AMOUNT'
 
 async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle amount selection from buttons"""
