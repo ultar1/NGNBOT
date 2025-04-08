@@ -961,6 +961,7 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         current_balance = user_balances.get(target_user_id, 0)
         if current_balance < amount:
+            await update.message.reply_text(
                 f"❌ User only has {current_balance} points, cannot deduct {amount} points!"
             )
             return
@@ -1474,6 +1475,22 @@ async def handle_task_rejection(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tasks button click"""
+    keyboard = [
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+    ]
+    
+    await update.callback_query.message.edit_text(
+        "📝 Task Instructions:\n\n"
+        "1. Join our channel and group\n"
+        "2. Share your referral link\n"
+        "3. Take a screenshot when someone joins using your link\n"
+        "4. Send the screenshot using /task command\n\n"
+        f"Reward: ₦{TASK_REWARD} per approved task",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1581,4 +1598,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-``` 
