@@ -1238,7 +1238,7 @@ def main():
         ],
         states={
             ACCOUNT_NUMBER: [
-                MessageHandler(filters.Text & ~filters.Command(), handle_account_number),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number),
                 CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
             BANK_NAME: [
@@ -1246,7 +1246,7 @@ def main():
                 CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
             ACCOUNT_NAME: [
-                MessageHandler(filters.Text & ~filters.Command(), handle_account_name),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
                 CallbackQueryHandler(cancel_withdrawal, pattern='^cancel_withdrawal$')
             ],
             AMOUNT_SELECTION: [
