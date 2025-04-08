@@ -35,6 +35,7 @@ REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for butto
 WELCOME_BONUS = 100  # ₦100
 REFERRAL_BONUS = 80  # Changed from 70 to 80
 DAILY_BONUS = 25  # ₦25
+TOP_REFERRER_BONUS = 1000  # ₦1000 weekly bonus for top 5 referrers
 MIN_WITHDRAWAL = 500  # ₦500 minimum withdrawal
 MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
 LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
@@ -60,6 +61,9 @@ user_verified_status = {}
 # Store coupon codes
 active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
 used_coupons = {}    # Format: {code: [user_ids]}
+
+# Store last weekly reward time
+last_weekly_reward = datetime.now()
 
 # Define conversation states
 (
@@ -1179,6 +1183,51 @@ async def clean_expired_coupons():
     for code in expired_codes:
         del active_coupons[code]
         del used_coupons[code]
+
+async def process_weekly_rewards(context: ContextTypes.DEFAULT_TYPE):
+    """Process weekly rewards for top 5 referrers"""
+    global last_weekly_reward
+    current_time = datetime.now()
+    
+    # Check if a week has passed
+    if (current_time - last_weekly_reward).days >= 7:
+        # Get top 5 referrers
+        top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+        
+        # Reward each top referrer
+        for user_id, _ in top_referrers:
+            user_balances[user_id] = user_balances.get(user_id, 0) + TOP_REFERRER_BONUS
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"🎉 Congratulations! You're one of our top 5 referrers!\n"
+                         f"You've earned ₦{TOP_REFERRER_BONUS} as a weekly reward!"
+                )
+            except Exception as e:
+                print(f"Failed to send top referrer notification: {e}")
+        
+        # Announce in channel
+        if top_referrers:
+            try:
+                message = "🏆 Weekly Top Referrers Awarded!\n\n"
+                for i, (user_id, referred) in enumerate(top_referrers, 1):
+                    try:
+                        user = await context.bot.get_chat(user_id)
+                        name = user.first_name
+                        message += f"{i}. {name}: {len(referred)} referrals\n"
+                    except:
+                        message += f"{i}. User {user_id}: {len(referred)} referrals\n"
+                
+                message += f"\nEach winner received ₦{TOP_REFERRER_BONUS}! 🎁"
+                
+                await context.bot.send_message(
+                    chat_id=ANNOUNCEMENT_CHANNEL,
+                    text=message
+                )
+            except Exception as e:
+                print(f"Failed to send channel announcement: {e}")
+        
+        last_weekly_reward = current_time
 
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
