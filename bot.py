@@ -1278,3 +1278,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Rest of the button handlers...
+
+def main():
+    # Get environment variables with fallbacks
+    token = os.getenv('BOT_TOKEN')
+    port = int(os.getenv('PORT', '8443'))
+    heroku_app_name = os.getenv('HEROKU_APP_NAME')
+    
+    if not token:
+        raise ValueError("No BOT_TOKEN found in environment variables")
+
+    # Initialize bot application
+    application = Application.builder().token(token).build()
+
+    # Add handlers
+    # ... existing handler code ...
+
+    # Set up webhook configuration
+    if heroku_app_name:
+        # Running on Heroku
+        webhook_url = f"https://{heroku_app_name}.herokuapp.com/{token}"
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=token,
+            webhook_url=webhook_url,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "chat_member"
+            ]
+        )
+    else:
+        # Local development - use polling
+        application.run_polling(allowed_updates=[
+            "message",
+            "callback_query",
+            "chat_member"
+        ])
+
+if __name__ == '__main__':
+    main()
