@@ -1663,25 +1663,15 @@ def main():
         # Set up webhook with correct domain and path
         webhook_path = token
         webhook_url = f"{webhook_base_url}/{webhook_path}"
-        print(f"Setting webhook to: {webhook_url}")
-        
-        # Start the webhook with proper configuration
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
             url_path=webhook_path,
-            webhook_url=webhook_url,
-            allowed_updates=[
-                "message",
-                "callback_query",
-                "chat_member"
-            ],
-            drop_pending_updates=True
+            webhook_url=webhook_url
         )
-        print("Webhook setup complete!")
     except Exception as e:
-        print(f"Error starting bot: {str(e)}")
-        raise e
+        print(f"Error setting up webhook: {e}")
+        return
 
 if __name__ == '__main__':
     main()
