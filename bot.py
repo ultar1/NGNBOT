@@ -634,6 +634,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     )
     return ACCOUNT_NUMBER
 
+# Fix the handle_account_number function to ensure it transitions to the next step
 async def handle_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     account_number = update.message.text.strip()
