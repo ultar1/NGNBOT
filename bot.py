@@ -34,16 +34,16 @@ REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
 # Constants
-WELCOME_BONUS = 50  # Changed from 100 to 50
-REFERRAL_BONUS = 80  # Keep at 80
-DAILY_BONUS = 25  # ₦25
-TOP_REFERRER_BONUS = 1000  # ₦1000 weekly bonus for top 5 referrers
-MIN_WITHDRAWAL = 500  # ₦500 minimum withdrawal
-MAX_WITHDRAWAL = 1000  # ₦1000 maximum withdrawal
-LEAVE_PENALTY = 200  # ₦200 penalty for leaving channel/group
-CHAT_REWARD = 1  # ₦1 per chat message
-MAX_DAILY_CHAT_REWARD = 50  # Maximum ₦50 from chat per day
-TASK_REWARD = 100  # ₦100 reward for completing task
+WELCOME_BONUS = 50
+REFERRAL_BONUS = 80
+DAILY_BONUS = 25
+TOP_REFERRER_BONUS = 1000
+MIN_WITHDRAWAL = 500
+MAX_WITHDRAWAL = 1000
+LEAVE_PENALTY = 200
+CHAT_REWARD = 1
+MAX_DAILY_CHAT_REWARD = 50
+TASK_REWARD = 250  # Updated from 100 to 250
 WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
 # Store user data in memory
