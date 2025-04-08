@@ -291,7 +291,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             reply_markup=reply_markup
         )
 
-# Fix the issue where update.message is None in show_referral_menu
+# Fix the AttributeError in show_referral_menu by using callback_query.message if update.message is None
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ref_count = len(referrals.get(user.id, set()))
@@ -302,7 +302,10 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
+    # Use callback_query.message if update.message is None
+    target_message = update.message or update.callback_query.message
+
+    await target_message.reply_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})",
         reply_markup=reply_markup
@@ -475,12 +478,12 @@ def escape_markdown(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     return text
 
+# Fix the task button to ensure it works correctly
 async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tasks button click"""
     query = update.callback_query
     await query.answer()
-    
-    task_text = escape_markdown(
+
+    task_text = (
         "📋 Available Tasks:\n\n"
         "1️⃣ Create Content Task\n"
         "• Create engaging content about our bot\n"
@@ -492,16 +495,15 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         "• Make it engaging\n"
         "• Submit using: /task your_content_here"
     )
-    
+
     keyboard = [
         [InlineKeyboardButton("📝 Submit Content Task", callback_data='submit_task')],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
-    
+
     await query.message.edit_text(
         task_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='MarkdownV2'
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
