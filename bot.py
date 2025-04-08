@@ -400,7 +400,7 @@ async def can_withdraw_today(user_id: int) -> bool:
     last_date = last_withdrawal.get(user_id)
     return last_date is None or last_date < today
 
-# Ensure all button handlers use callback_query.message where necessary
+# Fix the button_handler function to handle all button commands properly
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -451,6 +451,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data.startswith('bank_'):
         await handle_bank_selection(update, context)
+        return
+
+    elif query.data == 'daily_bonus':
+        daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
+        if daily_bonus_earned:
+            await query.answer("✅ Daily bonus credited!")
+            await query.message.edit_text(
+                f"🎉 You have received your daily bonus of {DAILY_BONUS} points (₦{DAILY_BONUS})!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+            )
+        else:
+            await query.answer("❌ You have already claimed your daily bonus today!")
+        return
+
+    elif query.data == 'balance':
+        balance = user_balances.get(user_id, 0)
+        await query.answer()
+        await query.message.edit_text(
+            f"Your current balance: {balance} points (₦{balance}) 💰",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
         return
 
     await query.answer("❌ Unknown action.")
