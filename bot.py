@@ -1495,22 +1495,16 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    webhook_base_url = os.getenv("WEBHOOK_URL")  # Get webhook URL from environment variable
+    webhook_base_url = "https://ngnbot-976310dc7194.herokuapp.com"  # Use direct webhook URL
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
-    
-    if not webhook_base_url:
-        raise ValueError("No WEBHOOK_URL found in environment variables")
 
     print("Starting bot initialization...")
 
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Define handlers first
-    print("Setting up handlers...")
-    
     # Rest of handler definitions...
     # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
