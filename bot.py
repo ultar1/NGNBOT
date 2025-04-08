@@ -288,6 +288,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             reply_markup=reply_markup
         )
 
+# Fix the issue where update.message is None in show_referral_menu
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ref_count = len(referrals.get(user.id, set()))
@@ -300,7 +301,10 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
+    # Use callback_query.message if update.message is None
+    target_message = update.message or update.callback_query.message
+
+    await target_message.reply_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
         f"Here's your referral link: {link}\n"
@@ -835,10 +839,6 @@ async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TY
         if target_user_id in user_withdrawal_state:
             refund_amount = user_withdrawal_state[target_user_id].get('amount', 0)
             user_balances[target_user_id] = user_balances.get(target_user_id, 0) + refund_amount
-            del user_withdrawal_state[target_user_id]
-        
-        # Notify user
-        await context.bot.send_message(
             chat_id=target_user_id,
             text=f"❌ Your withdrawal has been rejected.\nReason: {reason}\nYour points have been refunded."
         )
