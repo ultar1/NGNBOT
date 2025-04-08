@@ -74,6 +74,46 @@ last_weekly_reward = datetime.now()
     PAYMENT_SCREENSHOT  # Added payment screenshot state
 ) = range(5)  # Updated range to include new state
 
+# Store CAPTCHA data
+user_captcha = {}  # Format: {user_id: {'code': '1234', 'attempts': 0}}
+MAX_CAPTCHA_ATTEMPTS = 3
+
+def generate_captcha():
+    """Generate a 4-digit CAPTCHA code"""
+    return ''.join(random.choices(string.digits, k=4))
+
+async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    """Send CAPTCHA verification to user"""
+    captcha_code = generate_captcha()
+    user_captcha[user_id] = {'code': captcha_code, 'attempts': 0}
+    
+    keyboard = [[InlineKeyboardButton("🔄 Generate New CAPTCHA", callback_data='new_captcha')]]
+    
+    await update.message.reply_text(
+        f"🔒 Security Check\n\n"
+        f"Please enter this code: {captcha_code}\n\n"
+        f"Type the code and send it as a message.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return True
+
+async def verify_captcha(message: str, user_id: int) -> bool:
+    """Verify CAPTCHA input"""
+    if user_id not in user_captcha:
+        return False
+        
+    captcha_data = user_captcha[user_id]
+    captcha_data['attempts'] += 1
+    
+    if captcha_data['code'] == message.strip():
+        del user_captcha[user_id]
+        return True
+        
+    if captcha_data['attempts'] >= MAX_CAPTCHA_ATTEMPTS:
+        del user_captcha[user_id]
+        
+    return False
+
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -322,6 +362,35 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Update the start command to show channel and group buttons if the user isn't in them
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
+    # Check if user needs CAPTCHA verification
+    if not user.id in user_balances and not user.id in user_captcha:
+        await send_captcha(update, context, user.id)
+        return
+    
+    # If user has pending CAPTCHA, verify it
+    if user.id in user_captcha:
+        if update.message.text.startswith('/start'):
+            await update.message.reply_text(
+                "❌ Please complete the CAPTCHA verification first!\n"
+                "Enter the code shown above."
+            )
+            return
+            
+        is_verified = await verify_captcha(update.message.text, user.id)
+        if not is_verified:
+            remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
+            if remaining_attempts > 0:
+                await update.message.reply_text(
+                    f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ Too many failed attempts. Please start over with /start"
+                )
+            return
+        
+        await update.message.reply_text("✅ CAPTCHA verified successfully!")
 
     # Initialize verified status if new user
     if user.id not in user_verified_status:
