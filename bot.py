@@ -215,6 +215,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
 check_membership = check_and_handle_membership_change
 
+# Provide channel and group buttons during verification if the user isn't in them
 async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
@@ -222,7 +223,7 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     await update.message.reply_text(
         "⚠️ You must join our channel and group to use this bot!\n\n"
         "1. Join our channel\n"
@@ -251,6 +252,9 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         [
             InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
             InlineKeyboardButton("📝 Tasks", callback_data='tasks')
+        ],
+        [
+            InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')  # Add top referrals button
         ]
     ]
     
@@ -490,6 +494,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'tasks':
         await handle_tasks_button(update, context)
+        return
+
+    elif query.data == 'top_referrals':
+        await show_top_referrals(update, context)
         return
 
 def escape_markdown(text: str) -> str:
@@ -993,24 +1001,25 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+# Fix the generate command to handle errors and provide better feedback
 async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command to generate a coupon code"""
     user = update.effective_user
-    
+
     if not await is_admin(user.id):
         await update.message.reply_text("❌ This command is only for admins!")
         return
-    
+
     if not context.args or len(context.args) < 1:
         await update.message.reply_text("❌ Usage: /generate <amount>")
         return
-    
+
     try:
         amount = int(context.args[0])
         if amount <= 0:
             await update.message.reply_text("❌ Amount must be positive!")
             return
-        
+
         code = generate_coupon_code()
         expiration_time = datetime.now() + timedelta(minutes=30)
         active_coupons[code] = {
@@ -1018,7 +1027,7 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
             'expires_at': expiration_time
         }
         used_coupons[code] = []
-        
+
         await update.message.reply_text(
             f"✅ Generated new coupon code:\n\n"
             f"Code: `{code}`\n"
@@ -1102,6 +1111,20 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
+
+# Add a top referral button to show the top 5 referrals
+async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+    message = "🏆 Top 5 Referrers:\n\n"
+
+    for i, (user_id, referred_users) in enumerate(top_referrers, start=1):
+        message += f"{i}. User ID: {user_id} - Referrals: {len(referred_users)}\n"
+
+    if not top_referrers:
+        message += "No referrals yet!"
+
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Add a function to clean expired coupons periodically
 async def clean_expired_coupons():
