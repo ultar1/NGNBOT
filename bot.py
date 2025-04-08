@@ -23,7 +23,8 @@ last_signin = {}  # Track last sign in date for each user
 last_withdrawal = {}  # Track last withdrawal date for each user
 user_withdrawal_state = {}  # Store withdrawal process state
 user_bank_info = {}  # Store user bank details
-BOT_USERNAME = "pay9ja_bot"
+account_number_to_user = {}  # Map account numbers to user IDs
+BOT_USERNAME = "sub9ja_bot"  # Updated username
 
 # Channel and Group IDs
 CHANNEL_USERNAME = "latestinfoult"
@@ -31,7 +32,6 @@ GROUP_USERNAME = "-1002250504941"  # Updated with correct group ID
 REQUIRED_CHANNEL = f"@{CHANNEL_USERNAME}"
 REQUIRED_GROUP = f"https://t.me/+aeseN6uPGikzMDM0"  # Keep invite link for button
 
-# Constants
 WELCOME_BONUS = 100  # ₦100
 REFERRAL_BONUS = 80  # Changed from 70 to 80
 DAILY_BONUS = 25  # ₦25
