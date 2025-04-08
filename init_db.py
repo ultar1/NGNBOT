@@ -66,6 +66,8 @@ engine = create_engine(DATABASE_URL or 'sqlite:///bot.db')
 Session = sessionmaker(bind=engine)
 
 def init_db():
+    # Drop the users table if it exists to recreate with correct column type
+    User.__table__.drop(engine, checkfirst=True)
     Base.metadata.create_all(engine)
 
 if __name__ == "__main__":
