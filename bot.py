@@ -1025,13 +1025,13 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
         used_coupons[code] = []
 
         # Properly escape the code for MarkdownV2
-        escaped_code = escape_markdown(code)
+        escaped_code = escape_markdown(code, version=2)
 
         message = (
             f"✅ Generated new coupon code:\n\n"
             f"Code: `{escaped_code}`\n"
             f"Amount: ₦{amount}\n"
-            f"Expires: {escape_markdown(expiration_time.strftime('%Y-%m-%d %H:%M:%S'))}\n\n"
+            f"Expires: {escape_markdown(expiration_time.strftime('%Y-%m-%d %H:%M:%S'), version=2)}\n\n"
             f"Users can redeem this code using:\n"
             f"/redeem {escaped_code}"
         )
