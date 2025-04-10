@@ -85,12 +85,22 @@ def generate_captcha():
     return ''.join(random.choices(string.digits, k=4))
 
 async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """Send CAPTCHA verification to user"""
+    """Send CAPTCHA verification to user, handle blocking"""
+    if user_id in user_captcha and 'blocked_until' in user_captcha[user_id]:
+        blocked_until = user_captcha[user_id]['blocked_until']
+        if datetime.now() < blocked_until:
+            remaining_time = blocked_until - datetime.now()
+            minutes_remaining = int(remaining_time.total_seconds() / 60)
+            await update.message.reply_text(
+                f"❌ You are blocked from attempting CAPTCHA for another {minutes_remaining} minutes."
+            )
+            return False
+
     captcha_code = generate_captcha()
     user_captcha[user_id] = {'code': captcha_code, 'attempts': 0}
-    
+
     keyboard = [[InlineKeyboardButton("🔄 Generate New CAPTCHA", callback_data='new_captcha')]]
-    
+
     await update.message.reply_text(
         f"🔒 Security Check\n\n"
         f"Please enter this code: {captcha_code}\n\n"
@@ -100,20 +110,22 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     return True
 
 async def verify_captcha(message: str, user_id: int) -> bool:
-    """Verify CAPTCHA input"""
+    """Verify CAPTCHA input and block user for 1 hour after 3 failed attempts"""
     if user_id not in user_captcha:
         return False
-        
+
     captcha_data = user_captcha[user_id]
     captcha_data['attempts'] += 1
-    
+
     if captcha_data['code'] == message.strip():
         del user_captcha[user_id]
         return True
-        
+
     if captcha_data['attempts'] >= MAX_CAPTCHA_ATTEMPTS:
-        del user_captcha[user_id]
-        
+        # Block user for 1 hour
+        captcha_data['blocked_until'] = datetime.now() + timedelta(hours=1)
+        return False
+
     return False
 
 async def handle_new_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -413,69 +425,25 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Update the start command to show channel and group buttons if the user isn't in them
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the /start command with security check first"""
     user = update.effective_user
-    
-    # Store referral info if this is a referred user and they haven't been referred before
-    if context.args and len(context.args) > 0:
-        try:
-            referrer_id = int(context.args[0])
-            if (referrer_id != user.id and  # Prevent self-referral
-                not any(user.id in refs for refs in referrals.values())):  # Not already referred
-                pending_referrals[user.id] = referrer_id
-        except ValueError:
-            pass
-    
-    # Check if user needs CAPTCHA verification
-    if user.id not in user_balances and user.id not in user_captcha:
-        # Give welcome bonus for new users
-        if user.id not in user_balances:
-            print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user.id}")
-            user_balances[user.id] = WELCOME_BONUS
-            referrals[user.id] = set()
-            await update.message.reply_text(
-                f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-            )
-        
-        await send_captcha(update, context, user.id)
-        return
-    
-    # If user has pending CAPTCHA, verify it
-    if user.id in user_captcha:
-        if update.message and update.message.text and update.message.text.startswith('/start'):
-            await update.message.reply_text(
-                "❌ Please complete the CAPTCHA verification first!\n"
-                "Enter the code shown above."
-            )
-            return
-            
-        is_verified = await verify_captcha(update.message.text, user.id)
-        if not is_verified:
-            remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
-            if remaining_attempts > 0:
-                await update.message.reply_text(
-                    f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Too many failed attempts. Please start over with /start"
-                )
-            return
-        
-        # After successful CAPTCHA
-        await handle_verification_complete(update, context, user.id)
+
+    # Always initiate security check
+    captcha_sent = await send_captcha(update, context, user.id)
+    if not captcha_sent:
         return
 
-    # Initialize verified status if new user
-    if user.id not in user_verified_status:
-        user_verified_status[user.id] = False
-
-    # Check membership status
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
+    # If user is new, show verification menu after CAPTCHA
+    if user.id not in user_balances:
+        user_balances[user.id] = WELCOME_BONUS
+        referrals[user.id] = set()
+        await update.message.reply_text(
+            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
+        )
+        await show_verification_menu(update, context)
         return
-    
-    # Show dashboard for existing users
+
+    # For existing users, show dashboard after CAPTCHA
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
