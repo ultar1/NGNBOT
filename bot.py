@@ -1804,87 +1804,6 @@ async def handle_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# Fix security check to properly respond to user input
-async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user input for CAPTCHA verification"""
-    user = update.effective_user
-    message = update.message.text
-
-    is_verified = await verify_captcha(message, user.id)
-    if is_verified:
-        await handle_verification_complete(update, context, user.id)
-    else:
-        remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
-        if remaining_attempts > 0:
-            await update.message.reply_text(
-                f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
-            )
-        else:
-            await update.message.reply_text(
-                "❌ Too many failed attempts. Please try again after 15 minutes."
-            )
-
-# Ensure user is verified before using any commands
-async def check_user_verification(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Middleware to ensure user is verified before using commands"""
-    user = update.effective_user
-
-    # Check if user has passed CAPTCHA
-    if user.id in user_captcha:
-        await update.message.reply_text("❌ Please complete the CAPTCHA verification first!")
-        return False
-
-    # Check if user is a member of the required channel and group
-    is_member = await check_membership(user.id, context)
-    if not is_member:
-        await show_join_message(update, context)
-        return False
-
-    return True
-
-# Deduct 100 NGN for inactivity for 3 days
-async def check_inactivity():
-    """Deduct balance for users inactive for 3 days"""
-    today = datetime.now().date()
-    for user_id, last_active in last_signin.items():
-        if (today - last_active).days >= 3:
-            user_balances[user_id] = max(0, user_balances.get(user_id, 0) - 100)
-            last_signin[user_id] = today  # Reset last active date
-
-# Deduct balance if referral leaves the channel or group
-async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
-    """Deduct balance if a referral leaves the channel or group"""
-    for referrer_id, referred_users in referrals.items():
-        for referred_id in list(referred_users):
-            is_member = await check_membership(referred_id, context)
-            if not is_member:
-                # Deduct 50 NGN from referrer
-                user_balances[referrer_id] = max(0, user_balances.get(referrer_id, 0) - 50)
-
-                # Deduct 1000 NGN from the user who left
-                user_balances[referred_id] = max(0, user_balances.get(referred_id, 0) - 1000)
-
-                # Remove the referral
-                referred_users.remove(referred_id)
-
-# Update command handlers to include verification check
-async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Wrapper to ensure user verification before executing commands"""
-    if not await check_user_verification(update, context):
-        return
-
-    # Proceed with the actual command logic
-    await context.dispatcher.process_update(update)
-
-# Schedule periodic tasks
-async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
-    """Run periodic tasks like inactivity and referral checks"""
-    await check_inactivity()
-    await handle_referral_membership_changes(context)
-
-# Register periodic tasks
-application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
-
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1982,6 +1901,25 @@ def main():
     except Exception as e:
         print(f"Error setting up webhook: {e}")
         return
+
+    # Schedule periodic tasks
+    application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
+
+    # Update referral membership deduction to deduct ₦100 instead of ₦1000
+    async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
+        """Deduct balance if a referral leaves the channel or group"""
+        for referrer_id, referred_users in referrals.items():
+            for referred_id in list(referred_users):
+                is_member = await check_membership(referred_id, context)
+                if not is_member:
+                    # Deduct 100 NGN from referrer
+                    user_balances[referrer_id] = max(0, user_balances.get(referrer_id, 0) - 100)
+
+                    # Deduct 100 NGN from the user who left
+                    user_balances[referred_id] = max(0, user_balances.get(referred_id, 0) - 100)
+
+                    # Remove the referral
+                    referred_users.remove(referred_id)
 
 if __name__ == '__main__':
     main()
