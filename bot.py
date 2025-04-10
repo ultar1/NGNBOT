@@ -1122,48 +1122,50 @@ async def clean_expired_coupons():
         del used_coupons[code]
 
 async def process_weekly_rewards(context: ContextTypes.DEFAULT_TYPE):
-    """Process weekly rewards for top 5 referrers"""
+    """Process weekly rewards for top 2 referrers"""
     global last_weekly_reward
     current_time = datetime.now()
-    
+
     # Check if a week has passed
     if (current_time - last_weekly_reward).days >= 7:
-        # Get top 5 referrers
-        top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-        
-        # Reward each top referrer
-        for user_id, _ in top_referrers:
-            user_balances[user_id] = user_balances.get(user_id, 0) + TOP_REFERRER_BONUS
+        # Get top 2 referrers with at least 30 referrals
+        eligible_referrers = [(user_id, len(referred)) for user_id, referred in referrals.items() if len(referred) >= 30]
+        top_referrers = sorted(eligible_referrers, key=lambda x: x[1], reverse=True)[:2]
+
+        # Reward the top 2 referrers
+        for i, (user_id, ref_count) in enumerate(top_referrers):
+            reward = 1000 if i == 0 else 500  # 1st gets 1000, 2nd gets 500
+            user_balances[user_id] = user_balances.get(user_id, 0) + reward
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"🎉 Congratulations! You're one of our top 5 referrers!\n"
-                         f"You've earned ₦{TOP_REFERRER_BONUS} as a weekly reward!"
+                    text=f"🎉 Congratulations! You're one of our top referrers this week!\n"
+                         f"You earned ₦{reward} as a reward for having {ref_count} referrals!"
                 )
             except Exception as e:
                 print(f"Failed to send top referrer notification: {e}")
-        
+
         # Announce in channel
         if top_referrers:
             try:
                 message = "🏆 Weekly Top Referrers Awarded!\n\n"
-                for i, (user_id, referred) in enumerate(top_referrers, 1):
+                for i, (user_id, ref_count) in enumerate(top_referrers, 1):
                     try:
                         user = await context.bot.get_chat(user_id)
                         name = user.first_name
-                        message += f"{i}. {name}: {len(referred)} referrals\n"
+                        message += f"{i}. {name}: {ref_count} referrals\n"
                     except:
-                        message += f"{i}. User {user_id}: {len(referred)} referrals\n"
-                
-                message += f"\nEach winner received ₦{TOP_REFERRER_BONUS}! 🎁"
-                
+                        message += f"{i}. User {user_id}: {ref_count} referrals\n"
+
+                message += f"\n1st place: ₦1000\n2nd place: ₦500\n"
+
                 await context.bot.send_message(
                     chat_id=ANNOUNCEMENT_CHANNEL,
                     text=message
                 )
             except Exception as e:
                 print(f"Failed to send channel announcement: {e}")
-        
+
         last_weekly_reward = current_time
 
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1676,8 +1678,8 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
 
-# Add referral milestones
-MILESTONES = [10, 50, 100]  # Define referral milestones
+# Update referral milestones to start from 50
+MILESTONES = [50, 100, 200]  # Define referral milestones
 
 async def check_milestones(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """Check if the user has reached a referral milestone"""
@@ -1689,7 +1691,7 @@ async def check_milestones(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 text=f"🎉 Congratulations! You've reached {milestone} referrals and earned a special reward!"
             )
             # Add a reward for reaching the milestone
-            user_balances[user_id] = user_balances.get(user_id, 0) + 500  # Example reward
+            user_balances[user_id] = user_balances.get(user_id, 0) + 1000  # Example reward
             break
 
 # Add transaction history
@@ -1732,12 +1734,18 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_users = len(user_balances)
     total_referrals = sum(len(refs) for refs in referrals.values())
     total_balance = sum(user_balances.values())
+    total_withdrawals = sum(state['amount'] for state in user_withdrawal_state.values())
+    pending_withdrawals = len(user_withdrawal_state)
 
     message = (
         f"📊 Admin Dashboard:\n\n"
         f"• Total Users: {total_users}\n"
         f"• Total Referrals: {total_referrals}\n"
-        f"• Total Balance: ₦{total_balance}\n"
+        f"• Total Balance Across Users: ₦{total_balance}\n"
+        f"• Total Withdrawals Processed: ₦{total_withdrawals}\n"
+        f"• Pending Withdrawals: {pending_withdrawals}\n"
+        f"• Weekly Top Referrer Reward: ₦1000 (1st), ₦500 (2nd)\n"
+        f"• Referral Milestones: {', '.join(map(str, MILESTONES))} referrals\n"
     )
 
     await update.message.reply_text(message)
