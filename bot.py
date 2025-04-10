@@ -1,7 +1,7 @@
 import os
 import random
 import string
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters, ConversationHandler, ChatMemberHandler
 from telegram.constants import ChatMemberStatus
 from telegram.helpers import escape_markdown
@@ -74,8 +74,9 @@ last_weekly_reward = datetime.now()
     BANK_NAME,
     ACCOUNT_NAME,
     AMOUNT_SELECTION,
-    PAYMENT_SCREENSHOT  # Added payment screenshot state
-) = range(5)  # Updated range to include new state
+    PAYMENT_SCREENSHOT,  # Added payment screenshot state
+    LANGUAGE_SELECTION  # Added language selection state
+) = range(6)  # Updated range to include new state
 
 # Store CAPTCHA data
 user_captcha = {}  # Format: {user_id: {'code': '1234', 'attempts': 0}}
@@ -425,10 +426,59 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
-# Update the start command to show channel and group buttons if the user isn't in them
+# Add multi-language support
+# Supported languages
+LANGUAGES = {
+    'en': 'English',
+    'ha': 'Hausa',
+    'yo': 'Yoruba',
+    'fr': 'French',
+    'es': 'Spanish'
+}
+
+# Store user language preferences
+user_languages = {}
+
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allow users to select their preferred language"""
+    user_id = update.effective_user.id
+
+    # Create a keyboard with language options
+    keyboard = [[lang] for lang in LANGUAGES.values()]
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+    await update.message.reply_text(
+        "🌐 Please select your preferred language:",
+        reply_markup=reply_markup
+    )
+
+    return LANGUAGE_SELECTION
+
+async def handle_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the user's language selection"""
+    user_id = update.effective_user.id
+    selected_language = update.message.text
+
+    # Find the language code based on the selection
+    language_code = next((code for code, name in LANGUAGES.items() if name == selected_language), None)
+
+    if language_code:
+        user_languages[user_id] = language_code
+        await update.message.reply_text(f"✅ Language set to {selected_language}.")
+    else:
+        await update.message.reply_text("❌ Invalid selection. Please try again.")
+
+    return ConversationHandler.END
+
+# Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /start command with security check first"""
+    """Handle the /start command with language selection and security check"""
     user = update.effective_user
+
+    # Check if the user has already selected a language
+    if user.id not in user_languages:
+        await set_language(update, context)
+        return
 
     # Always initiate security check
     captcha_sent = await send_captcha(update, context, user.id)
@@ -1688,11 +1738,21 @@ def main():
         fallbacks=[CommandHandler("start", start)]
     )
 
+    # Define language selection handler
+    language_handler = ConversationHandler(
+        entry_points=[CommandHandler("language", set_language)],
+        states={
+            LANGUAGE_SELECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_language_selection)]
+        },
+        fallbacks=[CommandHandler("start", start)]
+    )
+
     print("Registering handlers...")
 
     # Register conversation handlers
     application.add_handler(withdrawal_handler)
     application.add_handler(payment_handler)
+    application.add_handler(language_handler)
 
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
