@@ -83,8 +83,8 @@ user_captcha = {}  # Format: {user_id: {'code': '1234', 'attempts': 0}}
 MAX_CAPTCHA_ATTEMPTS = 3
 
 def generate_captcha():
-    """Generate a 4-digit CAPTCHA code"""
-    return ''.join(random.choices(string.digits, k=4))
+    """Generate a 6-character alphanumeric CAPTCHA code"""
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
 async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     """Send CAPTCHA verification to user, handle blocking"""
