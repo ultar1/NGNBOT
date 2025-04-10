@@ -426,59 +426,10 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
-# Add multi-language support
-# Supported languages
-LANGUAGES = {
-    'en': 'English',
-    'ha': 'Hausa',
-    'yo': 'Yoruba',
-    'fr': 'French',
-    'es': 'Spanish'
-}
-
-# Store user language preferences
-user_languages = {}
-
-async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Allow users to select their preferred language"""
-    user_id = update.effective_user.id
-
-    # Create a keyboard with language options
-    keyboard = [[lang] for lang in LANGUAGES.values()]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-
-    await update.message.reply_text(
-        "🌐 Please select your preferred language:",
-        reply_markup=reply_markup
-    )
-
-    return LANGUAGE_SELECTION
-
-async def handle_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the user's language selection"""
-    user_id = update.effective_user.id
-    selected_language = update.message.text
-
-    # Find the language code based on the selection
-    language_code = next((code for code, name in LANGUAGES.items() if name == selected_language), None)
-
-    if language_code:
-        user_languages[user_id] = language_code
-        await update.message.reply_text(f"✅ Language set to {selected_language}.")
-    else:
-        await update.message.reply_text("❌ Invalid selection. Please try again.")
-
-    return ConversationHandler.END
-
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with language selection and security check"""
     user = update.effective_user
-
-    # Check if the user has already selected a language
-    if user.id not in user_languages:
-        await set_language(update, context)
-        return
 
     # Always initiate security check
     captcha_sent = await send_captcha(update, context, user.id)
@@ -1604,11 +1555,51 @@ quiz_data = [
     {"question": "Which year did World War II end?", "options": ["1945", "1939", "1950"], "answer": "1945"},
     {"question": "Who wrote 'To Kill a Mockingbird'?", "options": ["Harper Lee", "Mark Twain", "Ernest Hemingway"], "answer": "Harper Lee"},
     {"question": "What is the chemical symbol for gold?", "options": ["Au", "Ag", "Pb"], "answer": "Au"},
-    # ... Add 40 more questions with similar difficulty ...
+    {"question": "What is the longest river in the world?", "options": ["Nile", "Amazon", "Yangtze"], "answer": "Nile"},
+    {"question": "Who was the first man to step on the moon?", "options": ["Neil Armstrong", "Buzz Aldrin", "Yuri Gagarin"], "answer": "Neil Armstrong"},
+    {"question": "What is the capital of Japan?", "options": ["Tokyo", "Kyoto", "Osaka"], "answer": "Tokyo"},
+    {"question": "Which element has the chemical symbol 'O'?", "options": ["Oxygen", "Osmium", "Oganesson"], "answer": "Oxygen"},
+    {"question": "What is the largest mammal in the world?", "options": ["Blue Whale", "Elephant", "Giraffe"], "answer": "Blue Whale"},
+    {"question": "Who is known as the father of computers?", "options": ["Charles Babbage", "Alan Turing", "John von Neumann"], "answer": "Charles Babbage"},
+    {"question": "What is the capital of Egypt?", "options": ["Cairo", "Alexandria", "Giza"], "answer": "Cairo"},
+    {"question": "Which planet is known as the Red Planet?", "options": ["Mars", "Jupiter", "Saturn"], "answer": "Mars"},
+    {"question": "Who wrote 'Romeo and Juliet'?", "options": ["William Shakespeare", "Charles Dickens", "Jane Austen"], "answer": "William Shakespeare"},
+    {"question": "What is the boiling point of water at sea level?", "options": ["100°C", "90°C", "110°C"], "answer": "100°C"},
+    {"question": "Which country is known as the Land of the Rising Sun?", "options": ["Japan", "China", "South Korea"], "answer": "Japan"},
+    {"question": "What is the largest ocean on Earth?", "options": ["Pacific Ocean", "Atlantic Ocean", "Indian Ocean"], "answer": "Pacific Ocean"},
+    {"question": "Who invented the telephone?", "options": ["Alexander Graham Bell", "Thomas Edison", "Nikola Tesla"], "answer": "Alexander Graham Bell"},
+    {"question": "What is the capital of France?", "options": ["Paris", "Lyon", "Marseille"], "answer": "Paris"},
+    {"question": "Which gas do plants use for photosynthesis?", "options": ["Carbon Dioxide", "Oxygen", "Nitrogen"], "answer": "Carbon Dioxide"},
+    {"question": "Who painted the ceiling of the Sistine Chapel?", "options": ["Michelangelo", "Raphael", "Leonardo da Vinci"], "answer": "Michelangelo"},
+    {"question": "What is the capital of the United States?", "options": ["Washington, D.C.", "New York", "Los Angeles"], "answer": "Washington, D.C."},
+    {"question": "Which planet is closest to the Sun?", "options": ["Mercury", "Venus", "Earth"], "answer": "Mercury"},
+    {"question": "Who discovered gravity?", "options": ["Isaac Newton", "Albert Einstein", "Galileo Galilei"], "answer": "Isaac Newton"},
+    {"question": "What is the capital of Germany?", "options": ["Berlin", "Munich", "Frankfurt"], "answer": "Berlin"},
+    {"question": "Which is the largest continent?", "options": ["Asia", "Africa", "Europe"], "answer": "Asia"},
+    {"question": "Who wrote 'Pride and Prejudice'?", "options": ["Jane Austen", "Charlotte Bronte", "Emily Bronte"], "answer": "Jane Austen"},
+    {"question": "What is the chemical symbol for water?", "options": ["H2O", "O2", "CO2"], "answer": "H2O"},
+    {"question": "Which country is known for the Great Wall?", "options": ["China", "India", "Japan"], "answer": "China"},
+    {"question": "What is the capital of Canada?", "options": ["Ottawa", "Toronto", "Vancouver"], "answer": "Ottawa"},
+    {"question": "Who developed the theory of relativity?", "options": ["Albert Einstein", "Isaac Newton", "Niels Bohr"], "answer": "Albert Einstein"},
+    {"question": "What is the largest island in the world?", "options": ["Greenland", "Australia", "Madagascar"], "answer": "Greenland"},
+    {"question": "Which year did the Berlin Wall fall?", "options": ["1989", "1990", "1988"], "answer": "1989"},
+    {"question": "What is the capital of Italy?", "options": ["Rome", "Milan", "Naples"], "answer": "Rome"},
+    {"question": "Which is the smallest country in the world?", "options": ["Vatican City", "Monaco", "San Marino"], "answer": "Vatican City"},
+    {"question": "Who wrote 'The Odyssey'?", "options": ["Homer", "Virgil", "Sophocles"], "answer": "Homer"},
+    {"question": "What is the speed of light?", "options": ["299,792 km/s", "300,000 km/s", "150,000 km/s"], "answer": "299,792 km/s"},
+    {"question": "Which country is known for the Eiffel Tower?", "options": ["France", "Italy", "Germany"], "answer": "France"},
+    {"question": "What is the capital of Russia?", "options": ["Moscow", "Saint Petersburg", "Kazan"], "answer": "Moscow"},
+    {"question": "Who discovered America?", "options": ["Christopher Columbus", "Ferdinand Magellan", "James Cook"], "answer": "Christopher Columbus"},
+    {"question": "What is the largest organ in the human body?", "options": ["Skin", "Liver", "Heart"], "answer": "Skin"},
+    {"question": "Which year did the first manned moon landing occur?", "options": ["1969", "1970", "1968"], "answer": "1969"},
+    {"question": "What is the capital of South Africa?", "options": ["Pretoria", "Cape Town", "Johannesburg"], "answer": "Pretoria"},
+    {"question": "Who wrote '1984'?", "options": ["George Orwell", "Aldous Huxley", "Ray Bradbury"], "answer": "George Orwell"}
 ]
 
-# Track daily quiz participation
-user_quiz_status = {}
+# Remove language support
+# ...existing code...
+# Remove language-related handlers and functions
+# ...existing code...
 
 # Update quiz retry logic to use a 10-second timer
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1858,21 +1849,11 @@ def main():
         fallbacks=[CommandHandler("start", start)]
     )
 
-    # Define language selection handler
-    language_handler = ConversationHandler(
-        entry_points=[CommandHandler("language", set_language)],
-        states={
-            LANGUAGE_SELECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_language_selection)]
-        },
-        fallbacks=[CommandHandler("start", start)]
-    )
-
     print("Registering handlers...")
 
     # Register conversation handlers
     application.add_handler(withdrawal_handler)
     application.add_handler(payment_handler)
-    application.add_handler(language_handler)
 
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
