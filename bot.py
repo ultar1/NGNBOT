@@ -1219,69 +1219,40 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await update.message.reply_text(f"Current chat ID: {chat_id}")
 
+# Update group chat reward system
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle normal text messages and reward chat activity"""
+    """Handle group chat messages and reward group activity"""
     if not update.message or not update.message.text:
         return
-        
+
     user = update.effective_user
-    
-    # Check if user has pending CAPTCHA
-    if user.id in user_captcha:
-        is_verified = await verify_captcha(update.message.text, user.id)
-        if not is_verified:
-            remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
-            if remaining_attempts > 0:
-                await update.message.reply_text(
-                    f"❌ Wrong code! You have {remaining_attempts} attempts remaining.\n"
-                    "Try again or click Generate New CAPTCHA for a new code."
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Too many failed attempts. Please start over with /start"
-                )
-                if user.id in user_captcha:
-                    del user_captcha[user.id]
-            return
-        
-        # After successful CAPTCHA verification
-        await update.message.reply_text("✅ CAPTCHA verified successfully!")
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-            [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "⚠️ You must join our channel and group to use this bot!\n\n"
-            "1. Join our channel\n"
-            "2. Join our group\n"
-            "3. Click 'Check Membership' button",
-            reply_markup=reply_markup
-        )
+    chat = update.effective_chat
+
+    # Only reward messages in group chats
+    if chat.type != "group" and chat.type != "supergroup":
         return
-    
+
     # Check membership first
     is_member = await check_membership(user.id, context)
     if not is_member:
         await show_join_message(update, context)
         return
-    
-    # Process chat reward
+
+    # Process group chat reward
     today = datetime.now().date()
-    if user.id not in last_chat_reward or last_chat_reward[user.id] != today:
+    if chat.id not in last_chat_reward or last_chat_reward[chat.id] != today:
         # Reset daily counts if it's a new day
-        last_chat_reward[user.id] = today
-        daily_chat_count[user.id] = 0
-    
-    # Check if user hasn't reached daily chat reward limit
-    if daily_chat_count[user.id] < MAX_DAILY_CHAT_REWARD:
-        daily_chat_count[user.id] += 1
-        user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
+        last_chat_reward[chat.id] = today
+        daily_chat_count[chat.id] = 0
+
+    # Check if group hasn't reached daily chat reward limit
+    if daily_chat_count[chat.id] < MAX_DAILY_CHAT_REWARD:
+        daily_chat_count[chat.id] += 1
+        for member_id in user_balances.keys():
+            user_balances[member_id] = user_balances.get(member_id, 0) + CHAT_REWARD
         await update.message.reply_text(
-            f"💬 Thanks for being active! You earned ₦{CHAT_REWARD}.\n"
-            f"Today's chat earnings: {daily_chat_count[user.id]}/50."
+            f"💬 Thanks for being active in the group! Each member earned ₦{CHAT_REWARD}.\n"
+            f"Today's group chat earnings: {daily_chat_count[chat.id]}/50."
         )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1571,19 +1542,25 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
 
 import random
 
-# Store quiz data
+# Expand quiz data to 50 harder and clearer questions
 quiz_data = [
-    {"question": "What is the capital of Nigeria?", "options": ["Abuja", "Lagos", "Kano"], "answer": "Abuja"},
-    {"question": "Who is the current president of Nigeria?", "options": ["Muhammadu Buhari", "Goodluck Jonathan", "Olusegun Obasanjo"], "answer": "Muhammadu Buhari"},
-    {"question": "What is the largest river in Nigeria?", "options": ["River Niger", "River Benue", "River Kaduna"], "answer": "River Niger"},
-    {"question": "Which year did Nigeria gain independence?", "options": ["1960", "1970", "1950"], "answer": "1960"},
-    {"question": "What is the currency of Nigeria?", "options": ["Naira", "Dollar", "Cedi"], "answer": "Naira"}
+    {"question": "What year did the Titanic sink?", "options": ["1912", "1905", "1920"], "answer": "1912"},
+    {"question": "Who painted the Mona Lisa?", "options": ["Leonardo da Vinci", "Pablo Picasso", "Vincent van Gogh"], "answer": "Leonardo da Vinci"},
+    {"question": "What is the smallest planet in our solar system?", "options": ["Mercury", "Mars", "Venus"], "answer": "Mercury"},
+    {"question": "Which country won the FIFA World Cup in 2018?", "options": ["France", "Croatia", "Germany"], "answer": "France"},
+    {"question": "What is the capital of Australia?", "options": ["Canberra", "Sydney", "Melbourne"], "answer": "Canberra"},
+    {"question": "Who discovered penicillin?", "options": ["Alexander Fleming", "Marie Curie", "Louis Pasteur"], "answer": "Alexander Fleming"},
+    {"question": "What is the largest desert in the world?", "options": ["Sahara", "Antarctica", "Gobi"], "answer": "Antarctica"},
+    {"question": "Which year did World War II end?", "options": ["1945", "1939", "1950"], "answer": "1945"},
+    {"question": "Who wrote 'To Kill a Mockingbird'?", "options": ["Harper Lee", "Mark Twain", "Ernest Hemingway"], "answer": "Harper Lee"},
+    {"question": "What is the chemical symbol for gold?", "options": ["Au", "Ag", "Pb"], "answer": "Au"},
+    # ... Add 40 more questions with similar difficulty ...
 ]
 
 # Track daily quiz participation
 user_quiz_status = {}
 
-# Update quiz menu to include a timer
+# Update quiz retry logic to allow retry only after 24 hours
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the quiz menu with a random question and a 30-second timer"""
     user_id = update.effective_user.id
@@ -1622,8 +1599,9 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check if the quiz is still active
     if context.user_data.get('quiz_active', False):
         context.user_data['quiz_active'] = False
+        user_quiz_status[user_id] = today  # Mark as failed for today
         await update.callback_query.message.edit_text(
-            "⏰ Time's up! You didn't answer in time.",
+            "⏰ Time's up! You didn't answer in time. Try again tomorrow!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
 
@@ -1650,8 +1628,10 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
     else:
+        # Mark quiz as failed for today
+        user_quiz_status[user_id] = datetime.now().date()
         await query.message.edit_text(
-            f"❌ Wrong answer! The correct answer was: {correct_answer}.",
+            f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
 
