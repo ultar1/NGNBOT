@@ -343,7 +343,7 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
-    """Show dashboard with optional back button"""
+    """Show dashboard with optional back button, including quiz option"""
     user = update.effective_user
     balance = user_balances.get(user.id, 0)
     ref_count = len(referrals.get(user.id, set()))
@@ -363,6 +363,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             InlineKeyboardButton("📝 Tasks", callback_data='tasks')
         ],
         [
+            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),  # Add quiz button
             InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')  # Add top referrals button
         ]
     ]
@@ -1213,7 +1214,7 @@ async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Current chat ID: {chat_id}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle normal text messages"""
+    """Handle normal text messages and reward chat activity"""
     if not update.message or not update.message.text:
         return
         
@@ -1272,6 +1273,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if daily_chat_count[user.id] < MAX_DAILY_CHAT_REWARD:
         daily_chat_count[user.id] += 1
         user_balances[user.id] = user_balances.get(user.id, 0) + CHAT_REWARD
+        await update.message.reply_text(
+            f"💬 Thanks for being active! You earned ₦{CHAT_REWARD}.\n"
+            f"Today's chat earnings: {daily_chat_count[user.id]}/50."
+        )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1357,6 +1362,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
         )
         return ACCOUNT_NUMBER
+
+    # Handle quiz button
+    if query.data == 'quiz':
+        await show_quiz_menu(update, context)
+        return
+
+    if query.data.startswith('quiz_'):
+        await handle_quiz_answer(update, context)
+        return
 
     await query.answer("❌ Unknown action.")
 
@@ -1548,6 +1562,79 @@ async def handle_verification_complete(update: Update, context: ContextTypes.DEF
         await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
     else:
         await update.message.reply_text(message_text, reply_markup=reply_markup)
+
+import random
+
+# Store quiz data
+quiz_data = [
+    {"question": "What is the capital of Nigeria?", "options": ["Abuja", "Lagos", "Kano"], "answer": "Abuja"},
+    {"question": "Who is the current president of Nigeria?", "options": ["Muhammadu Buhari", "Goodluck Jonathan", "Olusegun Obasanjo"], "answer": "Muhammadu Buhari"},
+    {"question": "What is the largest river in Nigeria?", "options": ["River Niger", "River Benue", "River Kaduna"], "answer": "River Niger"},
+    {"question": "Which year did Nigeria gain independence?", "options": ["1960", "1970", "1950"], "answer": "1960"},
+    {"question": "What is the currency of Nigeria?", "options": ["Naira", "Dollar", "Cedi"], "answer": "Naira"}
+]
+
+# Track daily quiz participation
+user_quiz_status = {}
+
+async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the quiz menu with a random question"""
+    user_id = update.effective_user.id
+    today = datetime.now().date()
+
+    # Check if user has already taken the quiz today
+    if user_id in user_quiz_status and user_quiz_status[user_id] == today:
+        await update.callback_query.message.edit_text(
+            "❌ You have already taken the quiz today! Come back tomorrow for another chance.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+        return
+
+    # Select a random quiz question
+    quiz = random.choice(quiz_data)
+    question = quiz["question"]
+    options = quiz["options"]
+    correct_answer = quiz["answer"]
+
+    # Save the correct answer in context
+    context.user_data['quiz_answer'] = correct_answer
+
+    # Create buttons for options
+    keyboard = [[InlineKeyboardButton(option, callback_data=f'quiz_{option}')] for option in options]
+    keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
+
+    await update.callback_query.message.edit_text(
+        f"🧠 Quiz Time!\n\n{question}\n\nChoose the correct answer:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the user's quiz answer"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    selected_option = query.data.replace('quiz_', '')
+
+    # Check the correct answer
+    correct_answer = context.user_data.get('quiz_answer')
+    if not correct_answer:
+        await query.answer("❌ Something went wrong. Please try again later.")
+        return
+
+    if selected_option == correct_answer:
+        # Mark quiz as completed for today
+        user_quiz_status[user_id] = datetime.now().date()
+
+        # Reward the user
+        user_balances[user_id] = user_balances.get(user_id, 0) + 50
+        await query.message.edit_text(
+            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{user_balances[user_id]}.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+    else:
+        await query.message.edit_text(
+            f"❌ Wrong answer! The correct answer was: {correct_answer}.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
 
 def main():
     # Get environment variables with fallbacks
