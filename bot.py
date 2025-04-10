@@ -1685,6 +1685,126 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
 
+# Add referral milestones
+MILESTONES = [10, 50, 100]  # Define referral milestones
+
+async def check_milestones(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Check if the user has reached a referral milestone"""
+    ref_count = len(referrals.get(user_id, set()))
+    for milestone in MILESTONES:
+        if ref_count == milestone:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎉 Congratulations! You've reached {milestone} referrals and earned a special reward!"
+            )
+            # Add a reward for reaching the milestone
+            user_balances[user_id] = user_balances.get(user_id, 0) + 500  # Example reward
+            break
+
+# Add transaction history
+transaction_history = {}  # Format: {user_id: [{'type': 'credit', 'amount': 50, 'date': '2025-04-10'}]}
+
+def log_transaction(user_id: int, transaction_type: str, amount: int):
+    """Log a transaction for a user"""
+    if user_id not in transaction_history:
+        transaction_history[user_id] = []
+    transaction_history[user_id].append({
+        'type': transaction_type,
+        'amount': amount,
+        'date': datetime.now().strftime('%Y-%m-%d')
+    })
+
+async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the user's transaction history"""
+    user_id = update.effective_user.id
+    history = transaction_history.get(user_id, [])
+
+    if not history:
+        await update.message.reply_text("📜 You have no transaction history.")
+        return
+
+    message = "📜 Transaction History:\n\n"
+    for entry in history:
+        message += f"• {entry['date']}: {entry['type'].capitalize()} ₦{entry['amount']}\n"
+
+    await update.message.reply_text(message)
+
+# Add admin dashboard
+async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the admin dashboard"""
+    user = update.effective_user
+
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+
+    total_users = len(user_balances)
+    total_referrals = sum(len(refs) for refs in referrals.values())
+    total_balance = sum(user_balances.values())
+
+    message = (
+        f"📊 Admin Dashboard:\n\n"
+        f"• Total Users: {total_users}\n"
+        f"• Total Referrals: {total_referrals}\n"
+        f"• Total Balance: ₦{total_balance}\n"
+    )
+
+    await update.message.reply_text(message)
+
+# Fix security check to handle user input
+async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle user input for CAPTCHA verification"""
+    user = update.effective_user
+    message = update.message.text
+
+    is_verified = await verify_captcha(message, user.id)
+    if is_verified:
+        await handle_verification_complete(update, context, user.id)
+    else:
+        remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
+        if remaining_attempts > 0:
+            await update.message.reply_text(
+                f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Too many failed attempts. Please try again after 15 minutes."
+            )
+
+# Fix /info command
+async def handle_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to get user bot info"""
+    user = update.effective_user
+
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text("❌ Usage: /info <user_id>")
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+        balance = user_balances.get(target_user_id, 0)
+        ref_count = len(referrals.get(target_user_id, set()))
+        total_earnings = ref_count * REFERRAL_BONUS
+
+        info_message = (
+            f"👤 User Information\n"
+            f"───────────────\n"
+            f"ID: {target_user_id}\n"
+            f"Balance: {balance} points (₦{balance})\n"
+            f"Total Referrals: {ref_count}\n"
+            f"Referral Earnings: {total_earnings} points (₦{total_earnings})\n"
+        )
+
+        await update.message.reply_text(info_message)
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1766,10 +1886,13 @@ def main():
     application.add_handler(CommandHandler("reject", handle_reject_command))
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    application.add_handler(CommandHandler("history", show_transaction_history))
+    application.add_handler(CommandHandler("dashboard", admin_dashboard))
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_captcha_input))
 
     print("Setting up webhook...")
 
