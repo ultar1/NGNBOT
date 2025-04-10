@@ -1585,7 +1585,7 @@ def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
     port = int(os.getenv("PORT", "8443"))
-    webhook_base_url = "https://ngnbot-976310dc7194.herokuapp.com"
+    webhook_base_url = "https://sub9ja-5e9153f8bf96.herokuapp.com/"
     
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
