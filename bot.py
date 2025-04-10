@@ -1804,6 +1804,33 @@ async def handle_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+# Define user_quiz_status to track quiz participation
+user_quiz_status = {}  # Format: {user_id: date}
+
+# Define show_verification_menu function
+async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the verification menu to the user"""
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+         InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "✅ To complete your verification, please:\n"
+        "1. Join our channel\n"
+        "2. Join our group\n"
+        "3. Click 'Verify Membership' button",
+        reply_markup=reply_markup
+    )
+
+# Define periodic_tasks function
+async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
+    """Run periodic tasks like inactivity and referral checks"""
+    await check_inactivity()
+    await handle_referral_membership_changes(context)
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
