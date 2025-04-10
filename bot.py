@@ -7,6 +7,7 @@ from telegram.constants import ChatMemberStatus
 from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -110,7 +111,7 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     return True
 
 async def verify_captcha(message: str, user_id: int) -> bool:
-    """Verify CAPTCHA input and block user for 1 hour after 3 failed attempts"""
+    """Verify CAPTCHA input and block user for 15 minutes after 3 failed attempts"""
     if user_id not in user_captcha:
         return False
 
@@ -122,8 +123,8 @@ async def verify_captcha(message: str, user_id: int) -> bool:
         return True
 
     if captcha_data['attempts'] >= MAX_CAPTCHA_ATTEMPTS:
-        # Block user for 1 hour
-        captcha_data['blocked_until'] = datetime.now() + timedelta(hours=1)
+        # Block user for 15 minutes
+        captcha_data['blocked_until'] = datetime.now() + timedelta(minutes=15)
         return False
 
     return False
@@ -432,6 +433,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Always initiate security check
     captcha_sent = await send_captcha(update, context, user.id)
     if not captcha_sent:
+        return
+
+    # Wait for CAPTCHA verification
+    if user.id in user_captcha:
+        await update.message.reply_text("❌ Please complete the CAPTCHA verification first!")
         return
 
     # If user is new, show verification menu after CAPTCHA
@@ -1577,8 +1583,9 @@ quiz_data = [
 # Track daily quiz participation
 user_quiz_status = {}
 
+# Update quiz menu to include a timer
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the quiz menu with a random question"""
+    """Show the quiz menu with a random question and a 30-second timer"""
     user_id = update.effective_user.id
     today = datetime.now().date()
 
@@ -1598,15 +1605,27 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Save the correct answer in context
     context.user_data['quiz_answer'] = correct_answer
+    context.user_data['quiz_active'] = True
 
     # Create buttons for options
     keyboard = [[InlineKeyboardButton(option, callback_data=f'quiz_{option}')] for option in options]
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
 
     await update.callback_query.message.edit_text(
-        f"🧠 Quiz Time!\n\n{question}\n\nChoose the correct answer:",
+        f"🧠 Quiz Time!\n\n{question}\n\nYou have 30 seconds to answer!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+    # Start a 30-second timer
+    await asyncio.sleep(30)
+
+    # Check if the quiz is still active
+    if context.user_data.get('quiz_active', False):
+        context.user_data['quiz_active'] = False
+        await update.callback_query.message.edit_text(
+            "⏰ Time's up! You didn't answer in time.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
 
 async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the user's quiz answer"""
