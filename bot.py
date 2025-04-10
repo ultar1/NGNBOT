@@ -8,6 +8,10 @@ from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import asyncio
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -87,12 +91,13 @@ def generate_captcha():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
 async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """Send CAPTCHA verification to user, handle blocking"""
+    logging.info(f"Sending CAPTCHA to user {user_id}")
     if user_id in user_captcha and 'blocked_until' in user_captcha[user_id]:
         blocked_until = user_captcha[user_id]['blocked_until']
         if datetime.now() < blocked_until:
             remaining_time = blocked_until - datetime.now()
             minutes_remaining = int(remaining_time.total_seconds() / 60)
+            logging.warning(f"User {user_id} is blocked from CAPTCHA attempts for another {minutes_remaining} minutes.")
             await update.message.reply_text(
                 f"❌ You are blocked from attempting CAPTCHA for another {minutes_remaining} minutes."
             )
@@ -109,10 +114,11 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
         f"Type the code and send it as a message.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    logging.info(f"Generated CAPTCHA code {captcha_code} for user {user_id}")
     return True
 
 async def verify_captcha(message: str, user_id: int) -> bool:
-    """Verify CAPTCHA input and block user for 15 minutes after 3 failed attempts"""
+    logging.info(f"Verifying CAPTCHA for user {user_id} with input: {message}")
     if user_id not in user_captcha:
         return False
 
@@ -120,9 +126,11 @@ async def verify_captcha(message: str, user_id: int) -> bool:
     captcha_data['attempts'] += 1
 
     if captcha_data['code'] == message.strip():
+        logging.info(f"User {user_id} successfully verified CAPTCHA.")
         del user_captcha[user_id]
         return True
 
+    logging.warning(f"User {user_id} failed CAPTCHA verification. Attempts: {captcha_data['attempts']}")
     if captcha_data['attempts'] >= MAX_CAPTCHA_ATTEMPTS:
         # Block user for 15 minutes
         captcha_data['blocked_until'] = datetime.now() + timedelta(minutes=15)
@@ -1755,17 +1763,21 @@ async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle user input for CAPTCHA verification"""
     user = update.effective_user
     message = update.message.text
+    logging.info(f"Handling CAPTCHA input for user {user.id}: {message}")
 
     is_verified = await verify_captcha(message, user.id)
     if is_verified:
+        logging.info(f"User {user.id} passed CAPTCHA verification.")
         await handle_verification_complete(update, context, user.id)
     else:
         remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
         if remaining_attempts > 0:
+            logging.warning(f"User {user.id} has {remaining_attempts} CAPTCHA attempts remaining.")
             await update.message.reply_text(
                 f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
             )
         else:
+            logging.error(f"User {user.id} exceeded CAPTCHA attempts and is blocked.")
             await update.message.reply_text(
                 "❌ Too many failed attempts. Please try again after 15 minutes."
             )
@@ -1989,3 +2001,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+`
