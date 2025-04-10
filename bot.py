@@ -1832,14 +1832,43 @@ async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
     await handle_referral_membership_changes(context)
 
 async def check_inactivity():
-    """Placeholder function to handle user inactivity checks."""
-    print("Checking for inactive users...")
-    # Add logic to handle inactivity if needed
+    """Check for inactive users and take appropriate actions."""
+    inactive_users = []
+    current_time = datetime.now()
+
+    for user_id, last_active in last_signin.items():
+        # Consider users inactive if they haven't signed in for 30 days
+        if (current_time - last_active).days > 30:
+            inactive_users.append(user_id)
+
+    for user_id in inactive_users:
+        # Remove inactive users from referrals and balances
+        referrals.pop(user_id, None)
+        user_balances.pop(user_id, None)
+        print(f"Removed inactive user: {user_id}")
 
 async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
-    """Placeholder function to handle referral membership changes."""
-    print("Handling referral membership changes...")
-    # Add logic to handle referral membership changes if needed
+    """Deduct balance if a referral leaves the channel or group."""
+    for referrer_id, referred_users in referrals.items():
+        for referred_id in list(referred_users):
+            is_member = await check_membership(referred_id, context)
+            if not is_member:
+                # Deduct balance from referrer
+                user_balances[referrer_id] = max(0, user_balances.get(referrer_id, 0) - LEAVE_PENALTY)
+
+                # Notify referrer about the deduction
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=(f"⚠️ One of your referrals left the group or channel."
+                              f" A penalty of ₦{LEAVE_PENALTY} has been deducted from your balance.")
+                    )
+                except Exception as e:
+                    print(f"Failed to notify referrer {referrer_id}: {e}")
+
+                # Remove the referral
+                referred_users.remove(referred_id)
+                print(f"Removed referral {referred_id} for referrer {referrer_id}")
 
 def main():
     # Get environment variables with fallbacks
