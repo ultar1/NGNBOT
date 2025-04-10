@@ -1560,9 +1560,9 @@ quiz_data = [
 # Track daily quiz participation
 user_quiz_status = {}
 
-# Update quiz retry logic to allow retry only after 24 hours
+# Update quiz retry logic to use a 10-second timer
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the quiz menu with a random question and a 30-second timer"""
+    """Show the quiz menu with a random question and a 10-second timer"""
     user_id = update.effective_user.id
     today = datetime.now().date()
 
@@ -1589,12 +1589,12 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
 
     await update.callback_query.message.edit_text(
-        f"🧠 Quiz Time!\n\n{question}\n\nYou have 30 seconds to answer!",
+        f"🧠 Quiz Time!\n\n{question}\n\nYou have 10 seconds to answer!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    # Start a 30-second timer
-    await asyncio.sleep(30)
+    # Start a 10-second timer
+    await asyncio.sleep(10)
 
     # Check if the quiz is still active
     if context.user_data.get('quiz_active', False):
