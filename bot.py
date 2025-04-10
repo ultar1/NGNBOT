@@ -1595,8 +1595,67 @@ def main():
     # Initialize bot application
     application = Application.builder().token(token).build()
 
-    # Define handlers...
-    # ... existing handler definitions ...
+    # Define withdrawal handler
+    withdrawal_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
+            CallbackQueryHandler(handle_bank_name, pattern="^bank_")
+        ],
+        states={
+            ACCOUNT_NUMBER: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
+            ],
+            BANK_NAME: [
+                CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ],
+            ACCOUNT_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ],
+            AMOUNT_SELECTION: [
+                CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ]
+        },
+        fallbacks=[
+            CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
+            CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
+            CommandHandler("start", start)
+        ]
+    )
+
+    # Define payment handler for admin payment confirmation
+    payment_handler = ConversationHandler(
+        entry_points=[CommandHandler("paid", handle_paid_command)],
+        states={
+            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
+        },
+        fallbacks=[CommandHandler("start", start)]
+    )
+
+    print("Registering handlers...")
+
+    # Register conversation handlers
+    application.add_handler(withdrawal_handler)
+    application.add_handler(payment_handler)
+
+    # Register command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("chatid", get_chat_id))
+    application.add_handler(CommandHandler("generate", handle_generate_command))
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))
+    application.add_handler(CommandHandler("task", handle_task_command))
+    application.add_handler(CommandHandler("approve_task", handle_task_approval))
+    application.add_handler(CommandHandler("reject_task", handle_task_rejection))
+    application.add_handler(CommandHandler("reject", handle_reject_command))
+    application.add_handler(CommandHandler("add", handle_add_command))
+    application.add_handler(CommandHandler("deduct", handle_deduct_command))
+
+    # Register message and button handlers
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Setting up webhook...")
 
