@@ -1903,7 +1903,7 @@ def main():
     application.add_handler(CommandHandler("add", handle_add_command))
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     application.add_handler(CommandHandler("history", show_transaction_history))
-    application.add_handler(CommandHandler("dashboard", admin_dashboard))
+    application.add_handler(CommandHandler("db", admin_dashboard))
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
