@@ -362,6 +362,11 @@ def save_user_activities():
     with open(USER_ACTIVITY_FILE, "w") as file:
         json.dump(user_activities, file)
 
+# Ensure the directory for the user activities file exists
+if not os.path.exists(USER_ACTIVITY_FILE):
+    with open(USER_ACTIVITY_FILE, "w") as file:
+        json.dump({}, file)
+
 # Load user activities at startup
 user_activities = load_user_activities()
 
