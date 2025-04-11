@@ -176,7 +176,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             logging.error(f"Error checking channel membership: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Unable to verify your channel membership. Please ensure you have joined the required channel."
+                text=("❌ Unable to verify your channel membership. Please ensure you have joined the required channel. "
+                      "If the issue persists, try again later.")
             )
             return False
 
@@ -187,7 +188,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             logging.error(f"Error checking group membership: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Unable to verify your group membership. Please ensure you have joined the required group."
+                text=("❌ Unable to verify your group membership. Please ensure you have joined the required group. "
+                      "If the issue persists, try again later.")
             )
             return False
 
@@ -213,15 +215,17 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
         else:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Verification failed. Please ensure you have joined both the required channel and group."
+                text=("❌ Verification failed. Please ensure you have joined both the required channel and group. "
+                      "If you believe this is an error, contact support.")
             )
 
         return is_verified
     except Exception as e:
-        logging.error(f"Error in check_and_handle_membership_change: {e}")
+        logging.error(f"Unexpected error in check_and_handle_membership_change: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text="❌ An unexpected error occurred during verification. Please try again later."
+            text=("❌ An unexpected error occurred during verification. Please try again later. "
+                  "If the issue persists, contact support.")
         )
         return False
 
@@ -2060,7 +2064,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             logging.error(f"Error checking channel membership: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Unable to verify your channel membership. Please ensure you have joined the required channel."
+                text=("❌ Unable to verify your channel membership. Please ensure you have joined the required channel. "
+                      "If the issue persists, try again later.")
             )
             return False
 
@@ -2071,7 +2076,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             logging.error(f"Error checking group membership: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Unable to verify your group membership. Please ensure you have joined the required group."
+                text=("❌ Unable to verify your group membership. Please ensure you have joined the required group. "
+                      "If the issue persists, try again later.")
             )
             return False
 
@@ -2097,14 +2103,16 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
         else:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ Verification failed. Please ensure you have joined both the required channel and group."
+                text=("❌ Verification failed. Please ensure you have joined both the required channel and group. "
+                      "If you believe this is an error, contact support.")
             )
 
         return is_verified
     except Exception as e:
-        logging.error(f"Error in check_and_handle_membership_change: {e}")
+        logging.error(f"Unexpected error in check_and_handle_membership_change: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text="❌ An unexpected error occurred during verification. Please try again later."
+            text=("❌ An unexpected error occurred during verification. Please try again later. "
+                  "If the issue persists, contact support.")
         )
         return False
