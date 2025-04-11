@@ -350,6 +350,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with verification check"""
     user = update.effective_user
 
+    # Extract referrer ID from the start parameter
+    args = context.args
+    if args:
+        try:
+            referrer_id = int(args[0])
+            if referrer_id != user.id:  # Prevent self-referral
+                pending_referrals[user.id] = referrer_id
+                logging.info(f"Added pending referral: {user.id} referred by {referrer_id}")
+        except ValueError:
+            logging.warning(f"Invalid referrer ID in /start command: {args[0]}")
+
     # Check if user is verified
     is_verified = user_verified_status.get(user.id, False)
 
