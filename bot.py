@@ -1849,7 +1849,7 @@ for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
             json.dump({}, file)
 
 # Database connection setup
-DATABASE_URL = "your_heroku_database_url_here"  # Replace with your Heroku database URL
+DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
