@@ -1956,6 +1956,23 @@ def load_data(file_path):
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+# Authenticate using the service account JSON
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+credentials = Credentials.from_service_account_info(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
+service = build('drive', 'v3', credentials=credentials)
+
+# Function to upload a file to Google Drive
+def upload_to_google_drive(file_path, file_name):
+    file_metadata = {'name': file_name}
+    media = MediaFileUpload(file_path, resumable=True)
+    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    print(f"File uploaded successfully. File ID: {file.get('id')}")
+
+# Example usage
+file_path = 'user_activities.json'  # Path to the file you want to upload
+file_name = 'user_activities.json'  # Name of the file in Google Drive
+upload_to_google_drive(file_path, file_name)
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -2077,4 +2094,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-`
