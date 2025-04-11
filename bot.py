@@ -174,6 +174,10 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking channel membership: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Unable to verify your channel membership. Please ensure you have joined the required channel."
+            )
             return False
 
         # Check group membership
@@ -181,6 +185,10 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking group membership: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Unable to verify your group membership. Please ensure you have joined the required group."
+            )
             return False
 
         valid_member_status = [
@@ -202,10 +210,19 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         if is_verified:
             await process_pending_referral(user_id, context)
+        else:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Verification failed. Please ensure you have joined both the required channel and group."
+            )
 
         return is_verified
     except Exception as e:
         logging.error(f"Error in check_and_handle_membership_change: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ An unexpected error occurred during verification. Please try again later."
+        )
         return False
 
 check_membership = check_and_handle_membership_change
@@ -2041,6 +2058,10 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking channel membership: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Unable to verify your channel membership. Please ensure you have joined the required channel."
+            )
             return False
 
         # Check group membership
@@ -2048,6 +2069,10 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking group membership: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Unable to verify your group membership. Please ensure you have joined the required group."
+            )
             return False
 
         valid_member_status = [
@@ -2069,8 +2094,17 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         if is_verified:
             await process_pending_referral(user_id, context)
+        else:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Verification failed. Please ensure you have joined both the required channel and group."
+            )
 
         return is_verified
     except Exception as e:
         logging.error(f"Error in check_and_handle_membership_change: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ An unexpected error occurred during verification. Please try again later."
+        )
         return False
