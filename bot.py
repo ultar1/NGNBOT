@@ -10,8 +10,7 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 import json
-import boto3
-from botocore.exceptions import NoCredentialsError
+import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import atexit
@@ -1989,22 +1988,50 @@ def periodic_save():
     save_user_balances()
     logging.info("Periodic save completed.")
 
-# Schedule periodic saving
-async def start_periodic_saving():
-    while True:
-        await asyncio.sleep(SAVE_INTERVAL)
-        periodic_save()
+def save_to_db():
+    """Save user activities and balances to the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Save user activities
+    cursor.execute("CREATE TABLE IF NOT EXISTS user_activities (id INTEGER PRIMARY KEY, data TEXT)")
+    with open("user_activities.json", "r") as f:
+        activities = f.read()
+        cursor.execute("INSERT INTO user_activities (data) VALUES (?)", (activities,))
+
+    # Save user balances
+    cursor.execute("CREATE TABLE IF NOT EXISTS user_balances (id INTEGER PRIMARY KEY, data TEXT)")
+    with open("user_balances.json", "r") as f:
+        balances = f.read()
+        cursor.execute("INSERT INTO user_balances (data) VALUES (?)", (balances,))
+
+    conn.commit()
+    conn.close()
+    logging.info("Data saved to database.")
+
+# Update periodic save to include database saving
+def periodic_save():
+    """Periodically save user activities and balances."""
+    save_user_activities()
+    save_user_balances()
+    save_to_db()
+    logging.info("Periodic save completed.")
 
 # Save data on bot shutdown
 def save_on_exit():
     logging.info("Saving data on exit...")
     save_user_activities()
     save_user_balances()
+    save_to_db()
 
 atexit.register(save_on_exit)
 
 # Start the periodic saving task
 asyncio.create_task(start_periodic_saving())
+
+def start_periodic_saving():
+    logging.info("Periodic saving task started.")
+    # Add implementation here if needed
 
 def main():
     # Get environment variables with fallbacks
@@ -2042,7 +2069,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
