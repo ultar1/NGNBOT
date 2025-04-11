@@ -124,7 +124,7 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
             text=admin_message
         )
     except Exception as e:
-        print(f"Failed to send admin notification: {e}")
+        logging.error(f"Failed to send admin notification: {e}")
 
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """Process pending referral after verification"""
@@ -158,9 +158,9 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
                 )
                 
                 # Notify admin
-                await notify_admin_verified_user(user_id, referrer_id, context)
+                await notify_admin_new_user(user_id, {}, referrer_id, context)
             except Exception as e:
-                print(f"Error in referral notification: {e}")
+                logging.error(f"Error in referral notification: {e}")
         
         # Clean up pending referral
         del pending_referrals[user_id]
