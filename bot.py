@@ -126,44 +126,49 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
     except Exception as e:
         logging.error(f"Failed to send admin notification: {e}")
 
+# Add logging to debug referral and notification logic
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """Process pending referral after verification"""
+    logging.info(f"Processing pending referral for user_id: {user_id}")
     if user_id in pending_referrals:
         referrer_id = pending_referrals[user_id]
-        
+        logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
+
         # Initialize referrals set if not exists
         if referrer_id not in referrals:
             referrals[referrer_id] = set()
-            
+
         # Check if this is not a self-referral and user hasn't been referred before
         if (referrer_id != user_id and  # Prevent self-referral
             user_id not in referrals[referrer_id] and  # Not already referred by this user
             not any(user_id in refs for refs in referrals.values())):  # Not referred by anyone else
-            
+
             # Add to referrals and credit bonus
             referrals[referrer_id].add(user_id)
             user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
-            
+            logging.info(f"Referral bonus credited to referrer_id: {referrer_id}. New balance: {user_balances[referrer_id]}")
+
             try:
                 # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
                     text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
                 )
-                
+
                 # Notify new user
                 await context.bot.send_message(
                     chat_id=user_id,
                     text=f"✅ Verification complete! Your referrer earned ₦{REFERRAL_BONUS}!"
                 )
-                
+
                 # Notify admin
                 await notify_admin_new_user(user_id, {}, referrer_id, context)
             except Exception as e:
                 logging.error(f"Error in referral notification: {e}")
-        
+
         # Clean up pending referral
         del pending_referrals[user_id]
+        logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
@@ -1860,3 +1865,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+```
+</copilot-edited-file>
