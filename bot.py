@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, DictCursor
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -1738,6 +1738,18 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Received update: {update}")
 
+def get_db_connection():
+    """Establish and return a connection to the database."""
+    try:
+        conn = psycopg2.connect(
+            "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo",
+            cursor_factory=DictCursor
+        )
+        return conn
+    except Exception as e:
+        logging.error(f"Error connecting to the database: {e}")
+        raise
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1964,3 +1976,44 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
         # Clean up pending referral
         remove_pending_referral(user_id)
         logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
+
+def get_referrals(referrer_id):
+    """Retrieve a list of user IDs referred by the given referrer."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT referred_user_id FROM referrals WHERE referrer_id = %s", (referrer_id,))
+            return [row['referred_user_id'] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def add_referral(referrer_id, user_id):
+    """Add a referral record for the referrer and user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("INSERT INTO referrals (referrer_id, referred_user_id) VALUES (%s, %s)", (referrer_id, user_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+def update_user_balance(user_id, amount):
+    """Update the user's balance by adding the specified amount."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (amount, user_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+def get_user_balance(user_id):
+    """Retrieve the current balance of the user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+            result = cursor.fetchone()
+            return result['balance'] if result else 0
+    finally:
+        conn.close()
