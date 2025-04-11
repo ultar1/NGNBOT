@@ -1797,6 +1797,47 @@ def update_user_balance(user_id, amount):
     user_balances[user_id] = user_balances.get(user_id, 0) + amount
     save_user_balances()
 
+# Define file paths for storing data
+REFERRALS_FILE = "referrals.json"
+USER_ACTIVITIES_FILE = "user_activities.json"
+USER_BALANCES_FILE = "user_balances.json"
+
+# Generalized function to load data from a JSON file
+def load_data(file_path):
+    try:
+        with open(file_path, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+# Generalized function to save data to a JSON file
+def save_data(file_path, data):
+    with open(file_path, "w") as file:
+        json.dump(data, file)
+
+# Load data at startup
+referrals = load_data(REFERRALS_FILE)
+user_activities = load_data(USER_ACTIVITIES_FILE)
+user_balances = load_data(USER_BALANCES_FILE)
+
+# Save referrals whenever they are updated
+def update_referrals(user_id, referred_id):
+    referrals.setdefault(user_id, set()).add(referred_id)
+    save_data(REFERRALS_FILE, referrals)
+
+# Save user activities whenever they are updated
+def log_user_activity(user_id, activity):
+    user_activities.setdefault(user_id, []).append({
+        "activity": activity,
+        "timestamp": datetime.now().isoformat()
+    })
+    save_data(USER_ACTIVITIES_FILE, user_activities)
+
+# Save user balances whenever they are updated
+def update_user_balance(user_id, amount):
+    user_balances[user_id] = user_balances.get(user_id, 0) + amount
+    save_data(USER_BALANCES_FILE, user_balances)
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
