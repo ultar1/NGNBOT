@@ -131,29 +131,22 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
 # Add logging to debug referral and notification logic
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Processing pending referral for user_id: {user_id}")
-    if user_id in pending_referrals:
-        referrer_id = pending_referrals[user_id]
+    referrer_id = get_pending_referral(user_id)
+    if referrer_id:
         logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
 
-        # Initialize referrals set if not exists
-        if referrer_id not in referrals:
-            referrals[referrer_id] = set()
-
         # Check if this is not a self-referral and user hasn't been referred before
-        if (referrer_id != user_id and  # Prevent self-referral
-            user_id not in referrals[referrer_id] and  # Not already referred by this user
-            not any(user_id in refs for refs in referrals.values())):  # Not referred by anyone else
-
+        if referrer_id != user_id and user_id not in get_referrals(referrer_id):
             # Add to referrals and credit bonus
-            referrals[referrer_id].add(user_id)
-            user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
-            logging.info(f"Referral bonus credited to referrer_id: {referrer_id}. New balance: {user_balances[referrer_id]}")
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
+            logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
 
             try:
                 # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{get_user_balance(referrer_id)}"
                 )
 
                 # Notify new user
@@ -168,7 +161,7 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
                 logging.error(f"Error in referral notification: {e}")
 
         # Clean up pending referral
-        del pending_referrals[user_id]
+        remove_pending_referral(user_id)
         logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -1866,3 +1859,108 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Update database schema to include all user-related data
+def initialize_database():
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT UNIQUE NOT NULL,
+                    balance INT DEFAULT 0,
+                    last_signin DATE,
+                    last_withdrawal DATE
+                );
+
+                CREATE TABLE IF NOT EXISTS referrals (
+                    id SERIAL PRIMARY KEY,
+                    referrer_id BIGINT NOT NULL,
+                    referred_id BIGINT NOT NULL,
+                    UNIQUE (referrer_id, referred_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS pending_referrals (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT UNIQUE NOT NULL,
+                    referrer_id BIGINT NOT NULL
+                );
+            ''')
+            conn.commit()
+
+# Replace in-memory pending_referrals with database operations
+def add_pending_referral(user_id, referrer_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO pending_referrals (user_id, referrer_id) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
+                (user_id, referrer_id)
+            )
+            conn.commit()
+
+def get_pending_referral(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT referrer_id FROM pending_referrals WHERE user_id = %s", (user_id,))
+            result = cur.fetchone()
+            return result['referrer_id'] if result else None
+
+def remove_pending_referral(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM pending_referrals WHERE user_id = %s", (user_id,))
+            conn.commit()
+
+# Replace in-memory last_signin with database operations
+def update_last_signin(user_id):
+    today = datetime.now().date()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET last_signin = %s WHERE user_id = %s",
+                (today, user_id)
+            )
+            conn.commit()
+
+def get_last_signin(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_signin FROM users WHERE user_id = %s", (user_id,))
+            result = cur.fetchone()
+            return result['last_signin'] if result else None
+
+# Update process_pending_referral to use database for pending referrals
+async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    logging.info(f"Processing pending referral for user_id: {user_id}")
+    referrer_id = get_pending_referral(user_id)
+    if referrer_id:
+        logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
+
+        # Check if this is not a self-referral and user hasn't been referred before
+        if referrer_id != user_id and user_id not in get_referrals(referrer_id):
+            # Add to referrals and credit bonus
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
+            logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
+
+            try:
+                # Notify referrer
+                await context.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{get_user_balance(referrer_id)}"
+                )
+
+                # Notify new user
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"✅ Verification complete! Your referrer earned ₦{REFERRAL_BONUS}!"
+                )
+
+                # Notify admin
+                await notify_admin_new_user(user_id, {}, referrer_id, context)
+            except Exception as e:
+                logging.error(f"Error in referral notification: {e}")
+
+        # Clean up pending referral
+        remove_pending_referral(user_id)
+        logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
