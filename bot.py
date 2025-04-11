@@ -164,7 +164,6 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
-        # Log activity
         logging.info(f"User {user_id}: Checking membership status")
 
         # Check channel membership
@@ -202,10 +201,8 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
             group_member.status in valid_member_status
         )
 
-        # Log verification result
         logging.info(f"User {user_id}: Membership verified: {is_verified}")
 
-        # Update verified status
         user_verified_status[user_id] = is_verified
 
         if is_verified:
@@ -350,20 +347,17 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /start command with language selection and security check"""
+    """Handle the /start command with verification check"""
     user = update.effective_user
 
-    # If user is new, show verification menu
-    if user.id not in user_balances:
-        user_balances[user.id] = WELCOME_BONUS
-        referrals[user.id] = set()
-        await update.message.reply_text(
-            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-        )
+    # Check if user is verified
+    is_verified = user_verified_status.get(user.id, False)
+
+    if not is_verified:
         await show_verification_menu(update, context)
         return
 
-    # For existing users, show dashboard
+    # For verified users, show dashboard
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
