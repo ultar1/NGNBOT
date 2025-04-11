@@ -1904,7 +1904,7 @@ SERVICE_ACCOUNT_JSON = {
 def get_drive_service():
     """Authenticate and return the Google Drive service."""
     creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
-    return build('drive', 'v3', credentials=creds)
+    return build('drive', 'v3', credentials=creds, cache_discovery=False)
 
 def upload_to_drive(file_path, file_name):
     """Upload a file to Google Drive."""
@@ -1959,7 +1959,7 @@ def load_data(file_path):
 # Authenticate using the service account JSON
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 credentials = Credentials.from_service_account_info(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
-service = build('drive', 'v3', credentials=credentials)
+service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
 
 # Function to upload a file to Google Drive
 def upload_to_google_drive(file_path, file_name):
