@@ -1240,7 +1240,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
 
     # Only reward messages in group chats
-    if chat.type != "group" and chat.type != "supergroup":
+    if (chat.type != "group" and chat.type != "supergroup"):
         return
 
     # Check membership first
@@ -1760,11 +1760,9 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fix security check to handle user input
 async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user input for CAPTCHA verification"""
     user = update.effective_user
     message = update.message.text
-    logging.info(f"Handling CAPTCHA input for user {user.id}: {message}")
-
+    logging.info(f"Received message from user {user.id}: {message}")
     is_verified = await verify_captcha(message, user.id)
     if is_verified:
         logging.info(f"User {user.id} passed CAPTCHA verification.")
