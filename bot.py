@@ -19,7 +19,7 @@ import atexit
 DB_PATH = "mydb.sqlite"
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -968,7 +968,7 @@ async def handle_generate_command(update: Update, context: ContextTypes.DEFAULT_
 
         message = (
             f"✅ Generated new coupon code:\n\n"
-            f"Code: `{escaped_code}`\n"
+            f"Code: {repr(escaped_code)}\n"
             f"Amount: ₦{amount}\n"
             f"Expires: {escape_markdown(expiration_time.strftime('%Y-%m-%d %H:%M:%S'), version=2)}\n\n"
             f"Users can redeem this code using:\n"
@@ -2157,3 +2157,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+```
