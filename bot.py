@@ -14,6 +14,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import atexit
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
@@ -1978,6 +1979,32 @@ def initialize_database():
 
 # Call initialize_database at startup
 initialize_database()
+
+# Periodic saving interval in seconds
+SAVE_INTERVAL = 300  # Save every 5 minutes
+
+def periodic_save():
+    """Periodically save user activities and balances."""
+    save_user_activities()
+    save_user_balances()
+    logging.info("Periodic save completed.")
+
+# Schedule periodic saving
+async def start_periodic_saving():
+    while True:
+        await asyncio.sleep(SAVE_INTERVAL)
+        periodic_save()
+
+# Save data on bot shutdown
+def save_on_exit():
+    logging.info("Saving data on exit...")
+    save_user_activities()
+    save_user_balances()
+
+atexit.register(save_on_exit)
+
+# Start the periodic saving task
+asyncio.create_task(start_periodic_saving())
 
 def main():
     # Get environment variables with fallbacks
