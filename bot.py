@@ -165,7 +165,7 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         # Log activity
-        await log_user_activity(user_id, "Checking membership status")
+        logging.info(f"User {user_id}: Checking membership status")
 
         # Check channel membership
         try:
@@ -203,7 +203,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
         )
 
         # Log verification result
-        await log_user_activity(user_id, f"Membership verified: {is_verified}")
+        logging.info(f"User {user_id}: Membership verified: {is_verified}")
 
         # Update verified status
         user_verified_status[user_id] = is_verified
