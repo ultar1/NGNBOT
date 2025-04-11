@@ -82,81 +82,6 @@ last_weekly_reward = datetime.now()
     LANGUAGE_SELECTION  # Added language selection state
 ) = range(6)  # Updated range to include new state
 
-# Store CAPTCHA data
-user_captcha = {}  # Format: {user_id: {'code': '1234', 'attempts': 0}}
-MAX_CAPTCHA_ATTEMPTS = 3
-
-def generate_captcha():
-    """Generate a 6-character alphanumeric CAPTCHA code"""
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-
-async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    logging.info(f"Sending CAPTCHA to user {user_id}")
-    if user_id in user_captcha and 'blocked_until' in user_captcha[user_id]:
-        blocked_until = user_captcha[user_id]['blocked_until']
-        if datetime.now() < blocked_until:
-            remaining_time = blocked_until - datetime.now()
-            minutes_remaining = int(remaining_time.total_seconds() / 60)
-            logging.warning(f"User {user_id} is blocked from CAPTCHA attempts for another {minutes_remaining} minutes.")
-            await update.message.reply_text(
-                f"❌ You are blocked from attempting CAPTCHA for another {minutes_remaining} minutes."
-            )
-            return False
-
-    captcha_code = generate_captcha()
-    user_captcha[user_id] = {'code': captcha_code, 'attempts': 0}
-
-    keyboard = [[InlineKeyboardButton("🔄 Generate New CAPTCHA", callback_data='new_captcha')]]
-
-    await update.message.reply_text(
-        f"🔒 Security Check\n\n"
-        f"Please enter this code: {captcha_code}\n\n"
-        f"Type the code and send it as a message.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    logging.info(f"Generated CAPTCHA code {captcha_code} for user {user_id}")
-    return True
-
-async def verify_captcha(message: str, user_id: int) -> bool:
-    logging.info(f"Verifying CAPTCHA for user {user_id} with input: {message}")
-    if user_id not in user_captcha:
-        return False
-
-    captcha_data = user_captcha[user_id]
-    captcha_data['attempts'] += 1
-
-    if captcha_data['code'] == message.strip():
-        logging.info(f"User {user_id} successfully verified CAPTCHA.")
-        del user_captcha[user_id]
-        return True
-
-    logging.warning(f"User {user_id} failed CAPTCHA verification. Attempts: {captcha_data['attempts']}")
-    if captcha_data['attempts'] >= MAX_CAPTCHA_ATTEMPTS:
-        # Block user for 15 minutes
-        captcha_data['blocked_until'] = datetime.now() + timedelta(minutes=15)
-        return False
-
-    return False
-
-async def handle_new_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle new CAPTCHA generation button"""
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    # Generate new CAPTCHA
-    captcha_code = generate_captcha()
-    user_captcha[user_id] = {'code': captcha_code, 'attempts': 0}
-    
-    keyboard = [[InlineKeyboardButton("🔄 Generate New CAPTCHA", callback_data='new_captcha')]]
-    
-    await query.message.edit_text(
-        f"🔒 Security Check\n\n"
-        f"Please enter this code: {captcha_code}\n\n"
-        f"Type the code and send it as a message.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    await query.answer("New CAPTCHA generated!")
-
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -439,17 +364,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with language selection and security check"""
     user = update.effective_user
 
-    # Always initiate security check
-    captcha_sent = await send_captcha(update, context, user.id)
-    if not captcha_sent:
-        return
-
-    # Wait for CAPTCHA verification
-    if user.id in user_captcha:
-        await update.message.reply_text("❌ Please complete the CAPTCHA verification first!")
-        return
-
-    # If user is new, show verification menu after CAPTCHA
+    # If user is new, show verification menu
     if user.id not in user_balances:
         user_balances[user.id] = WELCOME_BONUS
         referrals[user.id] = set()
@@ -459,7 +374,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_verification_menu(update, context)
         return
 
-    # For existing users, show dashboard after CAPTCHA
+    # For existing users, show dashboard
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1270,12 +1185,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
 
-    # Handle CAPTCHA button first
-    if query.data == 'new_captcha':
-        await handle_new_captcha(update, context)
-        return
-
-    # Handle verification button next
+    # Handle verification button
     if query.data == 'verify_membership':
         await handle_verify_membership(update, context)
         return
@@ -1288,13 +1198,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("❌ Please join both the channel and group!")
             await show_join_message(query.message, context)
-        return
-
-    # Check membership for other actions
-    is_member = await check_membership(user_id, context)
-    if not is_member:
-        await query.answer("❌ Please join our channel and group first!")
-        await show_join_message(query.message, context)
         return
 
     if query.data == 'back_to_menu':
@@ -1526,31 +1429,6 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-async def handle_verification_complete(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """Handle user verification completion after CAPTCHA"""
-    keyboard = [
-        [
-            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
-            InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
-        ],
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    message_text = (
-        "✅ CAPTCHA verified successfully!\n\n"
-        "To complete registration:\n"
-        "1. Join our channel\n"
-        "2. Join our group\n"
-        "3. Click 'Verify Membership' button"
-    )
-    
-    # Handle different update types properly
-    if update.callback_query:
-        await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(message_text, reply_markup=reply_markup)
-
 import random
 
 # Expand quiz data to 50 harder and clearer questions
@@ -1758,40 +1636,6 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(message)
 
-# Fix security check to handle user input
-async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    message = update.message.text.strip()
-
-    # Log the received message
-    logging.info(f"Processing CAPTCHA input from user {user.id}: {message}")
-
-    # Check if the user has an active CAPTCHA
-    if user.id not in user_captcha:
-        logging.warning(f"User {user.id} attempted CAPTCHA input without an active CAPTCHA.")
-        await update.message.reply_text("❌ No active CAPTCHA found. Please start again with /start.")
-        return
-
-    # Verify the CAPTCHA input
-    is_verified = await verify_captcha(message, user.id)
-
-    if is_verified:
-        logging.info(f"User {user.id} successfully passed CAPTCHA verification.")
-        await update.message.reply_text("✅ CAPTCHA verified successfully!")
-        await handle_verification_complete(update, context, user.id)
-    else:
-        remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha[user.id]['attempts']
-        if remaining_attempts > 0:
-            logging.warning(f"User {user.id} failed CAPTCHA. {remaining_attempts} attempts remaining.")
-            await update.message.reply_text(
-                f"❌ Incorrect CAPTCHA. You have {remaining_attempts} attempts remaining."
-            )
-        else:
-            logging.error(f"User {user.id} exceeded CAPTCHA attempts and is now blocked.")
-            await update.message.reply_text(
-                "❌ Too many failed attempts. You are blocked from trying again for 15 minutes."
-            )
-
 # Fix /info command
 async def handle_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command to get user bot info"""
@@ -1972,7 +1816,6 @@ def main():
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_captcha_input))
 
     # Register the logging handler
     application.add_handler(MessageHandler(filters.ALL, log_all_updates))
