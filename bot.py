@@ -1886,6 +1886,99 @@ def get_bot_activities(user_id):
 # activities = get_bot_activities('user123')
 # print(activities)
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from urllib.parse import urlparse
+
+# Update database connection setup to use the provided URL
+def get_db_connection():
+    db_url = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
+    result = urlparse(db_url)
+
+    return psycopg2.connect(
+        dbname=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+        cursor_factory=RealDictCursor
+    )
+
+# Replace in-memory user_balances with database operations
+def get_user_balance(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+            result = cur.fetchone()
+            return result['balance'] if result else 0
+
+def update_user_balance(user_id, amount):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_balances (user_id, balance) VALUES (%s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET balance = user_balances.balance + %s",
+                (user_id, amount, amount)
+            )
+            conn.commit()
+
+# Replace in-memory referrals with database operations
+def add_referral(referrer_id, referred_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (referrer_id, referred_id)
+            )
+            conn.commit()
+
+def get_referrals(referrer_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT referred_id FROM referrals WHERE referrer_id = %s", (referrer_id,))
+            return [row['referred_id'] for row in cur.fetchall()]
+
+# Example: Update the /start command to use the database
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    # Extract referrer ID from the start parameter
+    args = context.args
+    if args:
+        try:
+            referrer_id = int(args[0])
+            if referrer_id != user.id:  # Prevent self-referral
+                add_referral(referrer_id, user.id)
+        except ValueError:
+            logging.warning(f"Invalid referrer ID in /start command: {args[0]}")
+
+    # Get user balance from the database
+    balance = get_user_balance(user.id)
+
+    # Show dashboard
+    await show_dashboard(update, context)
+
+# Ensure database tables exist
+def initialize_database():
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_balances (
+                    user_id BIGINT PRIMARY KEY,
+                    balance INT DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS referrals (
+                    referrer_id BIGINT,
+                    referred_id BIGINT,
+                    PRIMARY KEY (referrer_id, referred_id)
+                );
+            """)
+            conn.commit()
+
+# Call initialize_database at startup
+initialize_database()
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
