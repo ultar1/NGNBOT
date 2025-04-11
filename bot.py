@@ -206,7 +206,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         user_verified_status[user_id] = is_verified
 
-        if is_verified:
+        if (is_verified):
             await process_pending_referral(user_id, context)
         else:
             await context.bot.send_message(
@@ -1771,6 +1771,31 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
 
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Received update: {update}")
+
+# Define the file path for storing user balances
+USER_BALANCES_FILE = "user_balances.json"
+
+def load_user_balances():
+    """Load user balances from the JSON file."""
+    try:
+        with open(USER_BALANCES_FILE, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_user_balances():
+    """Save user balances to the JSON file."""
+    with open(USER_BALANCES_FILE, "w") as file:
+        json.dump(user_balances, file)
+
+# Load user balances at startup
+user_balances = load_user_balances()
+
+# Update user balance whenever it changes
+def update_user_balance(user_id, amount):
+    """Update the balance of a user and save it to the file."""
+    user_balances[user_id] = user_balances.get(user_id, 0) + amount
+    save_user_balances()
 
 def main():
     # Get environment variables with fallbacks
