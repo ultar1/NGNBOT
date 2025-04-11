@@ -1838,6 +1838,12 @@ def update_user_balance(user_id, amount):
     user_balances[user_id] = user_balances.get(user_id, 0) + amount
     save_data(USER_BALANCES_FILE, user_balances)
 
+# Ensure JSON files are created if they don't exist
+for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
+    if not os.path.exists(file_path):
+        with open(file_path, "w") as file:
+            json.dump({}, file)
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
