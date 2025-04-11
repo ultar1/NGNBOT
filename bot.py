@@ -166,75 +166,46 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
-        # For debugging
-        print(f"Checking membership for user {user_id}")
-        
+        # Log activity
+        await log_user_activity(user_id, "Checking membership status")
+
         # Check channel membership
         try:
             channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
-            print(f"Channel status for user {user_id}: {channel_member.status}")
         except Exception as e:
-            print(f"Error checking channel membership: {str(e)}")
+            logging.error(f"Error checking channel membership: {e}")
             return False
-            
-        # Check group membership using numeric ID
+
+        # Check group membership
         try:
             group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
-            print(f"Group status for user {user_id}: {group_member.status}")
         except Exception as e:
-            print(f"Error checking group membership: {str(e)}")
+            logging.error(f"Error checking group membership: {e}")
             return False
-        
-        # Use correct ChatMemberStatus values
+
         valid_member_status = [
             ChatMemberStatus.MEMBER,
             ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.OWNER  # Changed from CREATOR to OWNER
+            ChatMemberStatus.OWNER
         ]
-        
+
         is_verified = (
             channel_member.status in valid_member_status and
             group_member.status in valid_member_status
         )
-        
-        print(f"Is user {user_id} verified? {is_verified}")
-        
-        # Check if user was previously verified and now isn't
-        was_verified = user_verified_status.get(user_id, False)
-        if (was_verified and not is_verified):
-            # Apply penalty
-            current_balance = user_balances.get(user_id, 0)
-            user_balances[user_id] = max(0, current_balance - LEAVE_PENALTY)  # Don't go below 0
-            
-            try:
-                # Notify user about the penalty
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"⚠️ You left the channel or group!\n"
-                         f"A penalty of {LEAVE_PENALTY} points (₦{LEAVE_PENALTY}) has been deducted.\n"
-                         f"Please rejoin to continue using the bot."
-                )
-                
-                # Notify admin
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text=f"👤 User Left Alert!\n"
-                         f"User ID: {user_id}\n"
-                         f"Penalty Applied: {LEAVE_PENALTY} points (₦{LEAVE_PENALTY})\n"
-                         f"New Balance: {user_balances[user_id]} points"
-                )
-            except Exception as e:
-                print(f"Failed to send penalty notification: {e}")
-        
+
+        # Log verification result
+        await log_user_activity(user_id, f"Membership verified: {is_verified}")
+
         # Update verified status
         user_verified_status[user_id] = is_verified
-        
+
         if is_verified:
             await process_pending_referral(user_id, context)
-        
+
         return is_verified
     except Exception as e:
-        print(f"Error in check_and_handle_membership_change: {str(e)}")
+        logging.error(f"Error in check_and_handle_membership_change: {e}")
         return False
 
 check_membership = check_and_handle_membership_change
@@ -2017,3 +1988,89 @@ def get_user_balance(user_id):
             return result['balance'] if result else 0
     finally:
         conn.close()
+
+async def log_user_activity(user_id: int, activity: str):
+    """Log user activity into the database."""
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO user_activities (user_id, activity, timestamp)
+                VALUES (%s, %s, %s)
+                """,
+                (user_id, activity, datetime.now())
+            )
+            conn.commit()
+    except Exception as e:
+        logging.error(f"Failed to log user activity: {e}")
+    finally:
+        conn.close()
+
+async def log_user_info(user_id: int, username: str, first_name: str, last_name: str):
+    """Log user information into the database."""
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO user_info (user_id, username, first_name, last_name, timestamp)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                timestamp = EXCLUDED.timestamp
+                """,
+                (user_id, username, first_name, last_name, datetime.now())
+            )
+            conn.commit()
+    except Exception as e:
+        logging.error(f"Failed to log user info: {e}")
+    finally:
+        conn.close()
+
+# Update check_and_handle_membership_change to log activities
+async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        # Log activity
+        await log_user_activity(user_id, "Checking membership status")
+
+        # Check channel membership
+        try:
+            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+        except Exception as e:
+            logging.error(f"Error checking channel membership: {e}")
+            return False
+
+        # Check group membership
+        try:
+            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+        except Exception as e:
+            logging.error(f"Error checking group membership: {e}")
+            return False
+
+        valid_member_status = [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER
+        ]
+
+        is_verified = (
+            channel_member.status in valid_member_status and
+            group_member.status in valid_member_status
+        )
+
+        # Log verification result
+        await log_user_activity(user_id, f"Membership verified: {is_verified}")
+
+        # Update verified status
+        user_verified_status[user_id] = is_verified
+
+        if is_verified:
+            await process_pending_referral(user_id, context)
+
+        return is_verified
+    except Exception as e:
+        logging.error(f"Error in check_and_handle_membership_change: {e}")
+        return False
