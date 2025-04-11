@@ -1892,6 +1892,9 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
                 referred_users.remove(referred_id)
                 print(f"Removed referral {referred_id} for referrer {referrer_id}")
 
+async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info(f"Received update: {update}")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1970,6 +1973,9 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_captcha_input))
+
+    # Register the logging handler
+    application.add_handler(MessageHandler(filters.ALL, log_all_updates))
 
     print("Setting up webhook...")
 
