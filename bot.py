@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import asyncio
 import logging
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -128,7 +130,6 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
 
 # Add logging to debug referral and notification logic
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Process pending referral after verification"""
     logging.info(f"Processing pending referral for user_id: {user_id}")
     if user_id in pending_referrals:
         referrer_id = pending_referrals[user_id]
@@ -1865,5 +1866,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
-</copilot-edited-file>
