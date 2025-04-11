@@ -12,9 +12,8 @@ import logging
 import json
 import boto3
 from botocore.exceptions import NoCredentialsError
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2.service_account import Credentials
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
@@ -1849,129 +1848,43 @@ for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
         with open(file_path, "w") as file:
             json.dump({}, file)
 
-# AWS S3 Configuration
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
-AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
-AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+# Database connection setup
+DATABASE_URL = "your_heroku_database_url_here"  # Replace with your Heroku database URL
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
-s3_client = boto3.client(
-    's3',
-    aws_access_key_id=AWS_ACCESS_KEY,
-    aws_secret_access_key=AWS_SECRET_KEY,
-    region_name=AWS_REGION
-)
+# Save bot activity to the database
+def save_bot_activity(user_id, activity):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO bot_activities (user_id, activity, timestamp)
+                VALUES (%s, %s, NOW())
+                """,
+                (user_id, activity)
+            )
+            conn.commit()
 
-def upload_to_s3(file_path, s3_key):
-    """Upload a file to S3."""
-    try:
-        s3_client.upload_file(file_path, AWS_BUCKET_NAME, s3_key)
-        print(f"Uploaded {file_path} to S3 bucket {AWS_BUCKET_NAME} as {s3_key}.")
-    except NoCredentialsError:
-        print("AWS credentials not available.")
-    except Exception as e:
-        print(f"Failed to upload {file_path} to S3: {e}")
-
-def download_from_s3(s3_key, file_path):
-    """Download a file from S3."""
-    try:
-        s3_client.download_file(AWS_BUCKET_NAME, s3_key, file_path)
-        print(f"Downloaded {s3_key} from S3 bucket {AWS_BUCKET_NAME} to {file_path}.")
-    except NoCredentialsError:
-        print("AWS credentials not available.")
-    except Exception as e:
-        print(f"Failed to download {s3_key} from S3: {e}")
-
-# Google Drive API Configuration
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-SERVICE_ACCOUNT_FILE = 'service_account.json'  # Path to your service account JSON file
-
-# Service account JSON for Google Drive API
-SERVICE_ACCOUNT_JSON = {
-    "type": "service_account",
-    "project_id": "smsbot-456512",
-    "private_key_id": "e4723ea5a9e3ac6555b859d1f1b97927192f4f82",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCV41hMAb2n1yzm\nZEwVKpYXskR5fJZZJWCNRWYWvYgkKLFGTa7VFhoZU2XLW4BxsnRyro7RtGjamEMf\nFq4Hn51hhhNX6luwZ+P9uEgvuBB1YUhnaETLpUsk5DOPrVG5W6/GCAiNastXpEJd\nJJ9Fa8+eY0XF37+NgPO4Ty/FCu1xOfA43GnmzUuwdUOaFe8R06yWsGuYXOkiWgqr\nYZhZf3QUAELthw/CYNcmC1NvefUavhQl7z3NNpDhPfJlOpvQTm7EcJYAWjZ5B/cu\nIUxxgqSEEhoh/jTBpcZzBtF6Qd+BYmiOWZ4+RfFga+PE6bREb5vvdiUyFSbB3UaJ\ncbWTq9KXAgMBAAECggEAJtQt0AbVbFD8QzTxVrxhBIN8ZKJnSnG52O8E+tgfmApo\nnidKps3idfQaVzt9gzaxHvJkciPT0+kE3l1gOP5a5WQ3x5shJIpNUDF4ldAPh3Dr\nskobJExOMqDhUJOcK7H6T4lOOeBUDACz5nAxyGic8NGTxiZn947T1EfDPr7Ncvqj\nM2VtR2e2nHS1+nB2+ddz3cDXaOWBNSDEt+H7SYIYgS4p/ARThmzn2SXPk6a4/YVW\nx1IBUmxK84ZH+e+9befufhqaQs9ivfGkbG08Qdv3HSKf+dDziTju4cZQcQHiMf39\nIrRG6m+6SDC4J2NSSKJj9/KpyNne/ZNGvf8lvHTzcQKBgQDQyzarMJJ3q6YTiAOk\nhYuCcWTKCusgd69D2fOUOOa3nX729bn+FH9e+SDnephDsmqKCf6COyXGMkTt6YXF\nBVOJFKa+iLm213gKl04azW0hL1KbK1QAWNrtp041kPH7dr134R7aJDJlOkXJJtxI\nmYeuEkQi2TxDURLQNHbx6jN58QKBgQC3xrkxpwIExgJGksrViiBvuyzl5qq6MGTE\npumAUPqJdloLUKIMdUqG1rkWjQl9xiv0AzbkYeMcykq+lvz6Wp9kpkPHPH5ItY70\nHrZpzOn9D37A52f++4wMuVZOpJIPmyYl9lFWT17B0rumbwtxUqPDk/p0l1qdE4ZL\nN7Sss/ZNBwKBgQCtozI1r9E+4Gre91BANCdPNcoiFG5xs9b30Hu3GpMUxE/gRX6G\nBLngW8K3fsa+FdRwM9uKpnHFn+yfBoOO090itR/ueHopyos0E5yKwagt3tMN5DyZ\nhUucNHTgK0hyXc83sOodc9jNQmbi4AR2A+hIJTyw1oQ9X2EL8XWxvZlNoQKBgH/y\nv2UuXV1tbpAsC0P40vR3YJ7/pcXTg5TWkKNhvcyOtcpC7U+3KZgPTvXAY+dJXbiZ\ntFH1ROX6gWeIP8Ed7vNoPrAsEdAVd93GtEGdBRvG+fzcH6+K+sqxDsHaGkb7QegU\nQjTRNavESBlsHo9bdeDo2erqpY/O1CTyN7w13zlpAoGAUO7JFsV/ceu69JDom9R4\nN87FfJZD4eJBmJiiD9QJIR/weDiNUZHwNkZJWooTbFwlIS7ueofL0Ehapj7qTk0p\nE6mYo219irmxahW12SaZuW8GDMkdMz+9siBG4m2HnmSOlf/w1fIjoJDwRaEA0dng\nJAkQTN+Fs5bqA+cjJLLD+JU=\n-----END PRIVATE KEY-----\n",
-    "client_email": "smsmbot@smsbot-456512.iam.gserviceaccount.com",
-    "client_id": "105912053534431568398",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/smsmbot%40smsbot-456512.iam.gserviceaccount.com",
-    "universe_domain": "googleapis.com"
-}
-
-def get_drive_service():
-    """Authenticate and return the Google Drive service."""
-    creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
-    return build('drive', 'v3', credentials=creds, cache_discovery=False)
-
-def upload_to_drive(file_path, file_name):
-    """Upload a file to Google Drive."""
-    try:
-        service = get_drive_service()
-        file_metadata = {'name': file_name}
-        media = MediaFileUpload(file_path, resumable=True)
-        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        print(f"Uploaded {file_name} to Google Drive with ID: {file.get('id')}")
-    except Exception as e:
-        print(f"Failed to upload {file_name} to Google Drive: {e}")
-
-def download_from_drive(file_name, file_path):
-    """Download a file from Google Drive."""
-    try:
-        service = get_drive_service()
-        results = service.files().list(q=f"name='{file_name}'", spaces='drive', fields='files(id, name)').execute()
-        items = results.get('files', [])
-
-        if not items:
-            print(f"File {file_name} not found on Google Drive.")
-            return
-
-        file_id = items[0]['id']
-        request = service.files().get_media(fileId=file_id)
-        with open(file_path, 'wb') as file:
-            downloader = MediaIoBaseDownload(file, request)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                print(f"Download {int(status.progress() * 100)}%.")
-        print(f"Downloaded {file_name} from Google Drive to {file_path}.")
-    except Exception as e:
-        print(f"Failed to download {file_name} from Google Drive: {e}")
-
-# Update save_data and load_data to use Google Drive
-def save_data(file_path, data):
-    with open(file_path, "w") as file:
-        json.dump(data, file)
-    file_name = os.path.basename(file_path)
-    upload_to_drive(file_path, file_name)
-
-def load_data(file_path):
-    file_name = os.path.basename(file_path)
-    download_from_drive(file_name, file_path)
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-# Authenticate using the service account JSON
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-credentials = Credentials.from_service_account_info(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
-service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
-
-# Function to upload a file to Google Drive
-def upload_to_google_drive(file_path, file_name):
-    file_metadata = {'name': file_name}
-    media = MediaFileUpload(file_path, resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    print(f"File uploaded successfully. File ID: {file.get('id')}")
+# Retrieve bot activities for a user
+def get_bot_activities(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT activity, timestamp
+                FROM bot_activities
+                WHERE user_id = %s
+                ORDER BY timestamp DESC
+                """,
+                (user_id,)
+            )
+            return cur.fetchall()
 
 # Example usage
-file_path = 'user_activities.json'  # Path to the file you want to upload
-file_name = 'user_activities.json'  # Name of the file in Google Drive
-upload_to_google_drive(file_path, file_name)
+# save_bot_activity('user123', 'Checked balance')
+# activities = get_bot_activities('user123')
+# print(activities)
 
 def main():
     # Get environment variables with fallbacks
