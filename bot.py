@@ -1816,14 +1816,14 @@ def save_data(file_path, data):
         json.dump(data, file)
 
 # Load data at startup
-referrals = load_data(REFERRALS_FILE)
-user_activities = load_data(USER_ACTIVITIES_FILE)
 user_balances = load_data(USER_BALANCES_FILE)
+user_activities = load_data(USER_ACTIVITIES_FILE)
+referrals = load_data(REFERRALS_FILE)
 
-# Save referrals whenever they are updated
-def update_referrals(user_id, referred_id):
-    referrals.setdefault(user_id, set()).add(referred_id)
-    save_data(REFERRALS_FILE, referrals)
+# Save user balances whenever they are updated
+def update_user_balance(user_id, amount):
+    user_balances[user_id] = user_balances.get(user_id, 0) + amount
+    save_data(USER_BALANCES_FILE, user_balances)
 
 # Save user activities whenever they are updated
 def log_user_activity(user_id, activity):
@@ -1833,10 +1833,10 @@ def log_user_activity(user_id, activity):
     })
     save_data(USER_ACTIVITIES_FILE, user_activities)
 
-# Save user balances whenever they are updated
-def update_user_balance(user_id, amount):
-    user_balances[user_id] = user_balances.get(user_id, 0) + amount
-    save_data(USER_BALANCES_FILE, user_balances)
+# Save referrals whenever they are updated
+def update_referrals(user_id, referred_id):
+    referrals.setdefault(user_id, set()).add(referred_id)
+    save_data(REFERRALS_FILE, referrals)
 
 # Ensure JSON files are created if they don't exist
 for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
