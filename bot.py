@@ -15,6 +15,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import atexit
 
+# Define DB_PATH globally at the top of the file
+DB_PATH = "mydb.sqlite"
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
 
