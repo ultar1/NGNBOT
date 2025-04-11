@@ -2032,9 +2032,16 @@ atexit.register(save_on_exit)
 # Start the periodic saving task
 asyncio.create_task(start_periodic_saving())
 
-def start_periodic_saving():
-    logging.info("Periodic saving task started.")
-    # Add implementation here if needed
+async def start_periodic_saving():
+    """Periodically save user data to JSON files."""
+    while True:
+        try:
+            save_user_activities()
+            save_user_balances()
+            logging.info("User data saved successfully.")
+        except Exception as e:
+            logging.error(f"Error saving user data: {e}")
+        await asyncio.sleep(300)  # Save every 5 minutes
 
 def main():
     # Get environment variables with fallbacks
@@ -2157,4 +2164,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
