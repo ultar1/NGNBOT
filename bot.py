@@ -1761,23 +1761,35 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Fix security check to handle user input
 async def handle_captcha_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    message = update.message.text
-    logging.info(f"Received message from user {user.id}: {message}")
+    message = update.message.text.strip()
+
+    # Log the received message
+    logging.info(f"Processing CAPTCHA input from user {user.id}: {message}")
+
+    # Check if the user has an active CAPTCHA
+    if user.id not in user_captcha:
+        logging.warning(f"User {user.id} attempted CAPTCHA input without an active CAPTCHA.")
+        await update.message.reply_text("❌ No active CAPTCHA found. Please start again with /start.")
+        return
+
+    # Verify the CAPTCHA input
     is_verified = await verify_captcha(message, user.id)
+
     if is_verified:
-        logging.info(f"User {user.id} passed CAPTCHA verification.")
+        logging.info(f"User {user.id} successfully passed CAPTCHA verification.")
+        await update.message.reply_text("✅ CAPTCHA verified successfully!")
         await handle_verification_complete(update, context, user.id)
     else:
-        remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha.get(user.id, {}).get('attempts', 0)
+        remaining_attempts = MAX_CAPTCHA_ATTEMPTS - user_captcha[user.id]['attempts']
         if remaining_attempts > 0:
-            logging.warning(f"User {user.id} has {remaining_attempts} CAPTCHA attempts remaining.")
+            logging.warning(f"User {user.id} failed CAPTCHA. {remaining_attempts} attempts remaining.")
             await update.message.reply_text(
-                f"❌ Wrong code! You have {remaining_attempts} attempts remaining."
+                f"❌ Incorrect CAPTCHA. You have {remaining_attempts} attempts remaining."
             )
         else:
-            logging.error(f"User {user.id} exceeded CAPTCHA attempts and is blocked.")
+            logging.error(f"User {user.id} exceeded CAPTCHA attempts and is now blocked.")
             await update.message.reply_text(
-                "❌ Too many failed attempts. Please try again after 15 minutes."
+                "❌ Too many failed attempts. You are blocked from trying again for 15 minutes."
             )
 
 # Fix /info command
