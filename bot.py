@@ -340,7 +340,7 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Your Telegram Name: {user.first_name} {user.last_name if your.last_name else ''}\n\n"
+        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
         f"🔗 Your Referral Link:\n{referral_link}\n\n"
         f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
         reply_markup=reply_markup
