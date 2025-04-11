@@ -9,8 +9,6 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import asyncio
 import logging
-import psycopg2
-from psycopg2.extras import RealDictCursor, DictCursor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
@@ -131,22 +129,22 @@ async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int,
 # Add logging to debug referral and notification logic
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Processing pending referral for user_id: {user_id}")
-    referrer_id = get_pending_referral(user_id)
+    referrer_id = pending_referrals.get(user_id)
     if referrer_id:
         logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
 
         # Check if this is not a self-referral and user hasn't been referred before
-        if referrer_id != user_id and user_id not in get_referrals(referrer_id):
+        if referrer_id != user_id and user_id not in referrals.get(referrer_id, set()):
             # Add to referrals and credit bonus
-            add_referral(referrer_id, user_id)
-            update_user_balance(referrer_id, REFERRAL_BONUS)
+            referrals.setdefault(referrer_id, set()).add(user_id)
+            user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
             logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
 
             try:
                 # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{get_user_balance(referrer_id)}"
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
                 )
 
                 # Notify new user
@@ -161,7 +159,7 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
                 logging.error(f"Error in referral notification: {e}")
 
         # Clean up pending referral
-        remove_pending_referral(user_id)
+        pending_referrals.pop(user_id, None)
         logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
 
 async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -1730,18 +1728,6 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Received update: {update}")
 
-def get_db_connection():
-    """Establish and return a connection to the database."""
-    try:
-        conn = psycopg2.connect(
-            "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo",
-            cursor_factory=DictCursor
-        )
-        return conn
-    except Exception as e:
-        logging.error(f"Error connecting to the database: {e}")
-        raise
-
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -1863,256 +1849,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# Update database schema to include all user-related data
-def initialize_database():
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT UNIQUE NOT NULL,
-                    balance INT DEFAULT 0,
-                    last_signin DATE,
-                    last_withdrawal DATE
-                );
-
-                CREATE TABLE IF NOT EXISTS referrals (
-                    id SERIAL PRIMARY KEY,
-                    referrer_id BIGINT NOT NULL,
-                    referred_id BIGINT NOT NULL,
-                    UNIQUE (referrer_id, referred_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS pending_referrals (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT UNIQUE NOT NULL,
-                    referrer_id BIGINT NOT NULL
-                );
-            ''')
-            conn.commit()
-
-# Replace in-memory pending_referrals with database operations
-def add_pending_referral(user_id, referrer_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO pending_referrals (user_id, referrer_id) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
-                (user_id, referrer_id)
-            )
-            conn.commit()
-
-def get_pending_referral(user_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT referrer_id FROM pending_referrals WHERE user_id = %s", (user_id,))
-            result = cur.fetchone()
-            return result['referrer_id'] if result else None
-
-def remove_pending_referral(user_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM pending_referrals WHERE user_id = %s", (user_id,))
-            conn.commit()
-
-# Replace in-memory last_signin with database operations
-def update_last_signin(user_id):
-    today = datetime.now().date()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET last_signin = %s WHERE user_id = %s",
-                (today, user_id)
-            )
-            conn.commit()
-
-def get_last_signin(user_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT last_signin FROM users WHERE user_id = %s", (user_id,))
-            result = cur.fetchone()
-            return result['last_signin'] if result else None
-
-# Update process_pending_referral to use database for pending referrals
-async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    logging.info(f"Processing pending referral for user_id: {user_id}")
-    referrer_id = get_pending_referral(user_id)
-    if referrer_id:
-        logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
-
-        # Check if this is not a self-referral and user hasn't been referred before
-        if referrer_id != user_id and user_id not in get_referrals(referrer_id):
-            # Add to referrals and credit bonus
-            add_referral(referrer_id, user_id)
-            update_user_balance(referrer_id, REFERRAL_BONUS)
-            logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
-
-            try:
-                # Notify referrer
-                await context.bot.send_message(
-                    chat_id=referrer_id,
-                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{get_user_balance(referrer_id)}"
-                )
-
-                # Notify new user
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"✅ Verification complete! Your referrer earned ₦{REFERRAL_BONUS}!"
-                )
-
-                # Notify admin
-                await notify_admin_new_user(user_id, {}, referrer_id, context)
-            except Exception as e:
-                logging.error(f"Error in referral notification: {e}")
-
-        # Clean up pending referral
-        remove_pending_referral(user_id)
-        logging.info(f"Pending referral for user_id: {user_id} has been processed and removed.")
-
-def get_referrals(referrer_id):
-    """Retrieve a list of user IDs referred by the given referrer."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT referred_user_id FROM referrals WHERE referrer_id = %s", (referrer_id,))
-            return [row['referred_user_id'] for row in cursor.fetchall()]
-    finally:
-        conn.close()
-
-def add_referral(referrer_id, user_id):
-    """Add a referral record for the referrer and user."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO referrals (referrer_id, referred_user_id) VALUES (%s, %s)", (referrer_id, user_id))
-            conn.commit()
-    finally:
-        conn.close()
-
-def update_user_balance(user_id, amount):
-    """Update the user's balance by adding the specified amount."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (amount, user_id))
-            conn.commit()
-    finally:
-        conn.close()
-
-def get_user_balance(user_id):
-    """Retrieve the current balance of the user."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
-            result = cursor.fetchone()
-            return result['balance'] if result else 0
-    finally:
-        conn.close()
-
-async def log_user_activity(user_id: int, activity: str):
-    """Log user activity into the database."""
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO user_activities (user_id, activity, timestamp)
-                VALUES (%s, %s, %s)
-                """,
-                (user_id, activity, datetime.now())
-            )
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Failed to log user activity: {e}")
-    finally:
-        conn.close()
-
-async def log_user_info(user_id: int, username: str, first_name: str, last_name: str):
-    """Log user information into the database."""
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO user_info (user_id, username, first_name, last_name, timestamp)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                timestamp = EXCLUDED.timestamp
-                """,
-                (user_id, username, first_name, last_name, datetime.now())
-            )
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Failed to log user info: {e}")
-    finally:
-        conn.close()
-
-# Update check_and_handle_membership_change to log activities
-async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        # Log activity
-        await log_user_activity(user_id, "Checking membership status")
-
-        # Check channel membership
-        try:
-            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
-        except Exception as e:
-            logging.error(f"Error checking channel membership: {e}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=("❌ Unable to verify your channel membership. Please ensure you have joined the required channel. "
-                      "If the issue persists, try again later.")
-            )
-            return False
-
-        # Check group membership
-        try:
-            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
-        except Exception as e:
-            logging.error(f"Error checking group membership: {e}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=("❌ Unable to verify your group membership. Please ensure you have joined the required group. "
-                      "If the issue persists, try again later.")
-            )
-            return False
-
-        valid_member_status = [
-            ChatMemberStatus.MEMBER,
-            ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.OWNER
-        ]
-
-        is_verified = (
-            channel_member.status in valid_member_status and
-            group_member.status in valid_member_status
-        )
-
-        # Log verification result
-        await log_user_activity(user_id, f"Membership verified: {is_verified}")
-
-        # Update verified status
-        user_verified_status[user_id] = is_verified
-
-        if is_verified:
-            await process_pending_referral(user_id, context)
-        else:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=("❌ Verification failed. Please ensure you have joined both the required channel and group. "
-                      "If you believe this is an error, contact support.")
-            )
-
-        return is_verified
-    except Exception as e:
-        logging.error(f"Unexpected error in check_and_handle_membership_change: {e}")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=("❌ An unexpected error occurred during verification. Please try again later. "
-                  "If the issue persists, contact support.")
-        )
-        return False
