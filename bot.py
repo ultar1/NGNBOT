@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import asyncio
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime%s - %(levelname)s - %(message)s')
@@ -339,16 +340,49 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+        f"Your Telegram Name: {user.first_name} {user.last_name if your.last_name else ''}\n\n"
         f"🔗 Your Referral Link:\n{referral_link}\n\n"
         f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
         reply_markup=reply_markup
     )
 
+# Define the file path for storing user activities
+USER_ACTIVITY_FILE = "user_activities.json"
+
+def load_user_activities():
+    """Load user activities from the JSON file."""
+    try:
+        with open(USER_ACTIVITY_FILE, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_user_activities():
+    """Save user activities to the JSON file."""
+    with open(USER_ACTIVITY_FILE, "w") as file:
+        json.dump(user_activities, file)
+
+# Load user activities at startup
+user_activities = load_user_activities()
+
+# Update user activity logging in relevant functions
+def log_user_activity(user_id, activity):
+    """Log a user's activity."""
+    if user_id not in user_activities:
+        user_activities[user_id] = []
+    user_activities[user_id].append({
+        "activity": activity,
+        "timestamp": datetime.now().isoformat()
+    })
+    save_user_activities()
+
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with verification check"""
     user = update.effective_user
+
+    # Log the /start command activity
+    log_user_activity(user.id, "Started the bot")
 
     # Extract referrer ID from the start parameter
     args = context.args
