@@ -1717,7 +1717,7 @@ user_quiz_status = {}  # Format: {user_id: date}
 async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the verification menu to the user"""
     keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+        [InlineKeyboard
          InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
         [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
     ]
