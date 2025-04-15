@@ -352,7 +352,17 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Database connection setup
 DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    db_url = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
+    result = urlparse(db_url)
+
+    return psycopg2.connect(
+        dbname=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+        cursor_factory=RealDictCursor
+    )
 
 # Ensure database tables exist
 
@@ -1704,6 +1714,7 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         f"📊 Admin Dashboard:\n\n"
         f"• Total Users: {total_users}\n"
+```python
         f"• Total Referrals: {total_referrals}\n"
         f"• Total Balance Across Users: ₦{total_balance}\n"
         f"• Total Withdrawals: ₦{total_withdrawals}\n"
@@ -1834,7 +1845,17 @@ for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
 # Database connection setup
 DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    db_url = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
+    result = urlparse(db_url)
+
+    return psycopg2.connect(
+        dbname=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+        cursor_factory=RealDictCursor
+    )
 
 # Save bot activity to the database
 def save_bot_activity(user_id, activity):
@@ -2007,7 +2028,7 @@ def save_on_exit():
     save_user_balances()
     save_to_db()
 
-atexit.register(save_on_exit)
+# atexit.register(save_on_exit)
 
 # Start the periodic saving task
 asyncio.create_task(start_periodic_saving())
@@ -2148,3 +2169,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+```
