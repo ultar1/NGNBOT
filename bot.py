@@ -637,7 +637,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     amount = int(query.data.replace('amount_', ''))
     withdrawal_data = context.user_data.get('withdrawal', {})
     
-    # Save bank info for future use
+    # Save bank info for potential future use
     user_bank_info[user_id] = {
         'account_number': withdrawal_data['account_number'],
         'bank': withdrawal_data['bank'],
@@ -1717,7 +1717,6 @@ user_quiz_status = {}  # Format: {user_id: date}
 async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the verification menu to the user"""
     keyboard = [
-        [InlineKeyboardButton```python
         [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
          InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
         [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
@@ -2169,4 +2168,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
