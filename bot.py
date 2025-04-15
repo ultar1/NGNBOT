@@ -1112,7 +1112,7 @@ async def process_weekly_rewards(context: ContextTypes.DEFAULT_TYPE):
         if top_referrers:
             try:
                 message = "🏆 Weekly Top Referrers Awarded!\n\n"
-                for i, (user_id, ref_count) in enumerate(top_referrers, 1):
+                for i, (user_id, ref_count) in enumerate(top_referrers, start=1):
                     try:
                         user = await context.bot.get_chat(user_id)
                         name = user.first_name
@@ -1717,6 +1717,7 @@ user_quiz_status = {}  # Format: {user_id: date}
 async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the verification menu to the user"""
     keyboard = [
+        [InlineKeyboardButton```python
         [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
          InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
         [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
@@ -2146,6 +2147,9 @@ def main():
     # Schedule periodic tasks
     application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
 
+    # Start the periodic saving task
+    asyncio.create_task(start_periodic_saving())
+
     # Update referral membership deduction to deduct ₦100 instead of ₦1000
     async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
         """Deduct balance if a referral leaves the channel or group"""
@@ -2161,6 +2165,8 @@ def main():
 
                     # Remove the referral
                     referred_users.remove(referred_id)
+                    print(f"Removed referral {referred_id} for referrer {referrer_id}")
 
 if __name__ == '__main__':
     main()
+```
