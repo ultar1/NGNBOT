@@ -389,6 +389,16 @@ def initialize_database():
                     activity TEXT,
                     timestamp TIMESTAMP DEFAULT NOW()
                 );
+                CREATE TABLE IF NOT EXISTS user_bank (
+                    user_id BIGINT PRIMARY KEY,
+                    account_number VARCHAR(20),
+                    bank VARCHAR(50),
+                    account_name VARCHAR(100)
+                );
+                CREATE TABLE IF NOT EXISTS user_withdrawal_time (
+                    user_id BIGINT PRIMARY KEY,
+                    last_withdrawal TIMESTAMP
+                );
             """)
             conn.commit()
 
@@ -465,6 +475,45 @@ def set_user_verified(user_id, verified=True):
                 "INSERT INTO user_verification (user_id, verified) VALUES (%s, %s) "
                 "ON CONFLICT (user_id) DO UPDATE SET verified = %s",
                 (user_id, verified, verified)
+            )
+            conn.commit()
+
+# --- BANK DETAILS HELPERS ---
+def save_user_bank(user_id, account_number, bank, account_name):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_bank (user_id, account_number, bank, account_name) VALUES (%s, %s, %s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET account_number=%s, bank=%s, account_name=%s",
+                (user_id, account_number, bank, account_name, account_number, bank, account_name)
+            )
+            conn.commit()
+
+def get_user_bank(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT account_number, bank, account_name FROM user_bank WHERE user_id = %s", (user_id,))
+            return cur.fetchone()
+
+# --- WITHDRAWAL TIME HELPERS ---
+def can_withdraw_today(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_withdrawal FROM user_withdrawal_time WHERE user_id = %s", (user_id,))
+            row = cur.fetchone()
+            if not row or not row['last_withdrawal']:
+                return True
+            last_time = row['last_withdrawal']
+            now = datetime.now()
+            return (now - last_time).total_seconds() >= 86400
+
+def set_withdrawal_time(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_withdrawal_time (user_id, last_withdrawal) VALUES (%s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET last_withdrawal = %s",
+                (user_id, datetime.now(), datetime.now())
             )
             conn.commit()
 
