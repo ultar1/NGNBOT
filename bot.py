@@ -10,13 +10,9 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 import json
-import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import atexit
-
-# Define DB_PATH globally at the top of the file
-DB_PATH = "mydb.sqlite"
+from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -353,40 +349,102 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
-# Define the file path for storing user activities
-USER_ACTIVITY_FILE = "user_activities.json"
+# Database connection setup
+DATABASE_URL = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
+from urllib.parse import urlparse
 
-def load_user_activities():
-    """Load user activities from the JSON file."""
-    try:
-        with open(USER_ACTIVITY_FILE, "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+def get_db_connection():
+    result = urlparse(DATABASE_URL)
+    return psycopg2.connect(
+        dbname=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+        cursor_factory=RealDictCursor
+    )
 
-def save_user_activities():
-    """Save user activities to the JSON file."""
-    with open(USER_ACTIVITY_FILE, "w") as file:
-        json.dump(user_activities, file)
+# Ensure database tables exist
 
-# Ensure the directory for the user activities file exists
-if not os.path.exists(USER_ACTIVITY_FILE):
-    with open(USER_ACTIVITY_FILE, "w") as file:
-        json.dump({}, file)
+def initialize_database():
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_balances (
+                    user_id BIGINT PRIMARY KEY,
+                    balance INT DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS referrals (
+                    referrer_id BIGINT,
+                    referred_id BIGINT,
+                    PRIMARY KEY (referrer_id, referred_id)
+                );
+                CREATE TABLE IF NOT EXISTS user_activities (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    activity TEXT,
+                    timestamp TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            conn.commit()
 
-# Load user activities at startup
-user_activities = load_user_activities()
+initialize_database()
 
-# Update user activity logging in relevant functions
+# User balance operations
+
+def get_user_balance(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+            result = cur.fetchone()
+            return result['balance'] if result else 0
+
+def update_user_balance(user_id, amount):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_balances (user_id, balance) VALUES (%s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET balance = user_balances.balance + %s",
+                (user_id, amount, amount)
+            )
+            conn.commit()
+
+# Referral operations
+
+def add_referral(referrer_id, referred_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (referrer_id, referred_id)
+            )
+            conn.commit()
+
+def get_referrals(referrer_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT referred_id FROM referrals WHERE referrer_id = %s", (referrer_id,))
+            return [row['referred_id'] for row in cur.fetchall()]
+
+# User activity logging
+
 def log_user_activity(user_id, activity):
-    """Log a user's activity."""
-    if user_id not in user_activities:
-        user_activities[user_id] = []
-    user_activities[user_id].append({
-        "activity": activity,
-        "timestamp": datetime.now().isoformat()
-    })
-    save_user_activities()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_activities (user_id, activity) VALUES (%s, %s)",
+                (user_id, activity)
+            )
+            conn.commit()
+
+def get_bot_activities(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT activity, timestamp FROM user_activities WHERE user_id = %s ORDER BY timestamp DESC",
+                (user_id,)
+            )
+            return cur.fetchall()
 
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1469,8 +1527,6 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-import random
-
 # Expand quiz data to 50 harder and clearer questions
 quiz_data = [
     {"question": "What year did the Titanic sink?", "options": ["1912", "1905", "1920"], "answer": "1912"},
@@ -1668,63 +1724,7 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Total Users: {total_users}\n"
         f"• Total Referrals: {total_referrals}\n"
         f"• Total Balance Across Users: ₦{total_balance}\n"
-        f"• Total Withdrawals Processed: ₦{total_withdrawals}\n"
-        f"• Pending Withdrawals: {pending_withdrawals}\n"
-        f"• Weekly Top Referrer Reward: ₦1000 (1st), ₦500 (2nd)\n"
-        f"• Referral Milestones: {', '.join(map(str, MILESTONES))} referrals\n"
-    )
-
-    await update.message.reply_text(message)
-
-# Fix /info command
-async def handle_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to get user bot info"""
-    user = update.effective_user
-
-    if not await is_admin(user.id):
-        await update.message.reply_text("❌ This command is only for admins!")
-        return
-
-    if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ Usage: /info <user_id>")
-        return
-
-    try:
-        target_user_id = int(context.args[0])
-        balance = user_balances.get(target_user_id, 0)
-        ref_count = len(referrals.get(target_user_id, set()))
-        total_earnings = ref_count * REFERRAL_BONUS
-
-        info_message = (
-            f"👤 User Information\n"
-            f"───────────────\n"
-            f"ID: {target_user_id}\n"
-            f"Balance: {balance} points (₦{balance})\n"
-            f"Total Referrals: {ref_count}\n"
-            f"Referral Earnings: {total_earnings} points (₦{total_earnings})\n"
-        )
-
-        await update.message.reply_text(info_message)
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-# Define user_quiz_status to track quiz participation
-user_quiz_status = {}  # Format: {user_id: date}
-
-# Define show_verification_menu function
-async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the verification menu to the user"""
-    keyboard = [
-        [InlineKeyboard
-         InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "✅ To complete your verification, please:\n"
+        f
         "1. Join our channel\n"
         "2. Join our group\n"
         "3. Click 'Verify Membership' button",
@@ -2168,3 +2168,21 @@ def main():
 
 if __name__ == '__main__':
     main()
+            )
+        else:
+            admin_message += "Direct Join (No Referrer)"
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message
+        )
+    except Exception as e:
+        print(f"Failed to send admin notification: {e}")
+
+# Expand quiz data to 50 harder and clearer questions
+quiz_data = [
+    {"question": "What year did the Titanic sink?", "options": ["1912", "1905", "1920"], "answer": "1912"},
+    {"question": "Who painted the Mona Lisa?", "options": ["Leonardo da Vinci", "Pablo Picasso", "Vincent van Gogh"], "answer": "Leonardo da Vinci"},
+    {"question": "What is the smallest planet in our solar system?", "options": ["Mercury", "Mars", "Venus"], "answer": "Mercury"},
+    {"question": "Which country won the FIFA World Cup in 2018?", "options": ["France", "Croatia", "Germany"], "answer": "France"},
+    {"question": "What is the capital of Australia?", "options": ["Canberra", "Sydney", "Melbourne"], "answer": "Canberra"},
