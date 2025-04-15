@@ -1991,41 +1991,11 @@ def periodic_save():
     save_user_balances()
     logging.info("Periodic save completed.")
 
-def save_to_db():
-    """Save user activities and balances to the database."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Save user activities
-    cursor.execute("CREATE TABLE IF NOT EXISTS user_activities (id INTEGER PRIMARY KEY, data TEXT)")
-    with open("user_activities.json", "r") as f:
-        activities = f.read()
-        cursor.execute("INSERT INTO user_activities (data) VALUES (?)", (activities,))
-
-    # Save user balances
-    cursor.execute("CREATE TABLE IF NOT EXISTS user_balances (id INTEGER PRIMARY KEY, data TEXT)")
-    with open("user_balances.json", "r") as f:
-        balances = f.read()
-        cursor.execute("INSERT INTO user_balances (data) VALUES (?)", (balances,))
-
-    conn.commit()
-    conn.close()
-    logging.info("Data saved to database.")
-
-# Update periodic save to include database saving
-def periodic_save():
-    """Periodically save user activities and balances."""
-    save_user_activities()
-    save_user_balances()
-    save_to_db()
-    logging.info("Periodic save completed.")
-
 # Save data on bot shutdown
 def save_on_exit():
     logging.info("Saving data on exit...")
     save_user_activities()
     save_user_balances()
-    save_to_db()
 
 # atexit.register(save_on_exit)
 
