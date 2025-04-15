@@ -2036,7 +2036,6 @@ async def start_periodic_saving():
     """Periodically save user data to JSON files."""
     while True:
         try:
-            save_user_activities()
             save_user_balances()
             logging.info("User data saved successfully.")
         except Exception as e:
