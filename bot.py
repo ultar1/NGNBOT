@@ -380,6 +380,15 @@ def initialize_database():
                     referred_id BIGINT,
                     PRIMARY KEY (referrer_id, referred_id)
                 );
+                CREATE TABLE IF NOT EXISTS user_verification (
+                    user_id BIGINT PRIMARY KEY,
+                    verified BOOLEAN DEFAULT FALSE
+                );
+                CREATE TABLE IF NOT EXISTS user_activities (
+                    user_id BIGINT,
+                    activity TEXT,
+                    timestamp TIMESTAMP DEFAULT NOW()
+                );
             """)
             conn.commit()
 
@@ -441,6 +450,24 @@ def get_bot_activities(user_id):
             )
             return cur.fetchall()
 
+# --- Verification status DB helpers ---
+def is_user_verified(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT verified FROM user_verification WHERE user_id = %s", (user_id,))
+            row = cur.fetchone()
+            return row and row['verified']
+
+def set_user_verified(user_id, verified=True):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_verification (user_id, verified) VALUES (%s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET verified = %s",
+                (user_id, verified, verified)
+            )
+            conn.commit()
+
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with verification check"""
@@ -458,7 +485,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.warning(f"Invalid referrer ID in /start command: {args[0]}")
 
     # Check if user is verified
-    is_verified = user_verified_status.get(user.id, False)
+    is_verified = is_user_verified(user.id)
 
     if not is_verified:
         await show_verification_menu(update, context)
@@ -481,7 +508,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
         return
     
     # Mark user as verified
-    user_verified_status[user_id] = True
+    set_user_verified(user_id, True)
     
     # Give welcome bonus ONLY IF this is their first verification and they're not in user_balances
     if get_user_balance(user_id) == 0:
@@ -1705,11 +1732,18 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ This command is only for admins!")
         return
 
-    total_users = len(user_balances)
-    total_referrals = sum(len(refs) for refs in referrals.values())
-    total_balance = sum(user_balances.values())
-    total_withdrawals = sum(state['amount'] for state in user_withdrawal_state.values())
-    pending_withdrawals = len(user_withdrawal_state)
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM user_balances")
+            total_users = cur.fetchone()['count']
+            cur.execute("SELECT COUNT(*) FROM referrals")
+            total_referrals = cur.fetchone()['count']
+            cur.execute("SELECT SUM(balance) FROM user_balances")
+            total_balance = cur.fetchone()['sum'] or 0
+            cur.execute("SELECT SUM(amount) FROM (SELECT amount FROM user_activities WHERE activity LIKE 'withdrawal%') AS t")
+            total_withdrawals = cur.fetchone()['sum'] or 0
+            cur.execute("SELECT COUNT(*) FROM user_activities WHERE activity LIKE 'withdrawal_pending%'")
+            pending_withdrawals = cur.fetchone()['count']
 
     message = (
         f"📊 Admin Dashboard:\n\n"
