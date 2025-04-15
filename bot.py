@@ -96,7 +96,7 @@ async def check_and_credit_daily_bonus(user_id: int) -> bool:
     
     if last_date is None or last_date < today:
         last_signin[user_id] = today
-        user_balances[user_id] = user_balances.get(user_id, 0) + DAILY_BONUS
+        update_user_balance(user_id, DAILY_BONUS)
         return True
     return False
 
@@ -138,17 +138,17 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
         logging.info(f"Found referrer_id: {referrer_id} for user_id: {user_id}")
 
         # Check if this is not a self-referral and user hasn't been referred before
-        if referrer_id != user_id and user_id not in referrals.get(referrer_id, set()):
+        if referrer_id != user_id and user_id not in get_referrals(referrer_id):
             # Add to referrals and credit bonus
-            referrals.setdefault(referrer_id, set()).add(user_id)
-            user_balances[referrer_id] = user_balances.get(referrer_id, 0) + REFERRAL_BONUS
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
             logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
 
             try:
                 # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{user_balances[referrer_id]}"
+                    text=f"🎉 Your referral has been verified!\nYou earned ₦{REFERRAL_BONUS}!\nNew balance: ₦{get_user_balance(referrer_id)}"
                 )
 
                 # Notify new user
@@ -270,8 +270,8 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
     """Show dashboard with optional back button, including quiz option"""
     user = update.effective_user
-    balance = user_balances.get(user.id, 0)
-    ref_count = len(referrals.get(user.id, set()))
+    balance = get_user_balance(user.id)
+    ref_count = len(get_referrals(user.id))
     daily_chats = daily_chat_count.get(user.id, 0)
     chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
     
@@ -329,7 +329,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
 # Update the referral menu to include the user's referral link
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    ref_count = len(referrals.get(user.id, set()))
+    ref_count = len(get_referrals(user.id))
     referral_link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
 
     keyboard = [
@@ -484,10 +484,10 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
     user_verified_status[user_id] = True
     
     # Give welcome bonus ONLY IF this is their first verification and they're not in user_balances
-    if user_id not in user_balances:
+    if get_user_balance(user_id) == 0:
         print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user_id}")
-        user_balances[user_id] = WELCOME_BONUS
-        referrals[user_id] = set()
+        update_user_balance(user_id, WELCOME_BONUS)
+        add_referral(user_id, set())
         await query.message.reply_text(
             f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
         )
@@ -506,13 +506,13 @@ async def can_withdraw_today(user_id: int) -> bool:
 
 async def verify_referrals_membership(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Verify that all referrals are still members"""
-    if user_id not in referrals:
+    if not get_referrals(user_id):
         return True
         
     all_members = True
     not_in_channel = []
     
-    for referred_id in referrals[user_id]:
+    for referred_id in get_referrals(user_id):
         is_member = await check_membership(referred_id, context)
         if not is_member:
             all_members = False
@@ -539,7 +539,7 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
     
     # Check balance first
-    balance = user_balances.get(user_id, 0)
+    balance = get_user_balance(user_id)
     if balance < MIN_WITHDRAWAL:
         print(f"User {user_id} has insufficient balance: {balance}")  # Add debug logging
         await query.message.edit_text(
@@ -657,7 +657,7 @@ async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data['withdrawal']['account_name'] = account_name
     
     # Show amount selection
-    balance = user_balances.get(user_id, 0)
+    balance = get_user_balance(user_id)
     keyboard = []
     amounts = [amount for amount in WITHDRAWAL_AMOUNTS if amount <= balance]
     row = []
@@ -695,7 +695,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
     }
     
     # Verify amount
-    balance = user_balances.get(user_id, 0)
+    balance = get_user_balance(user_id)
     if amount > balance:
         await query.message.edit_text(
             "❌ Insufficient balance for this withdrawal amount!",
@@ -704,7 +704,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
     
     # Process withdrawal and store withdrawal state
-    user_balances[user_id] = balance - amount
+    update_user_balance(user_id, -amount)
     last_withdrawal[user_id] = datetime.now().date()
     
     # Store withdrawal state for potential refund
@@ -727,7 +727,7 @@ async def handle_amount_selection(update: Update, context: ContextTypes.DEFAULT_
         f"Bank: {withdrawal_data['bank']}\n"
         f"Account Number: {withdrawal_data['account_number']}\n"
         f"Amount: ₦{amount}\n"
-        f"Remaining balance: ₦{user_balances[user_id]}\n\n"
+        f"Remaining balance: ₦{get_user_balance(user_id)}\n\n"
         f"Your payment will be processed within 24 hours!",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
     )
@@ -887,7 +887,7 @@ async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TY
             refund_amount = withdrawal_info['amount']
             
             # Refund the points
-            user_balances[target_user_id] = user_balances.get(target_user_id, 0) + refund_amount
+            update_user_balance(target_user_id, refund_amount)
             
             # Notify user about rejection and refund
             await context.bot.send_message(
@@ -895,7 +895,7 @@ async def handle_reject_command(update: Update, context: ContextTypes.DEFAULT_TY
                 text=(f"❌ Your withdrawal of ₦{refund_amount} has been rejected.\n"
                       f"Reason: {reason}\n\n"
                       f"✅ Your {refund_amount} points have been refunded to your balance.\n"
-                      f"New balance: ₦{user_balances[target_user_id]}")
+                      f"New balance: ₦{get_user_balance(target_user_id)}")
             )
             
             # Clear withdrawal state
@@ -930,7 +930,7 @@ async def handle_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("❌ Amount must be positive!")
             return
         
-        user_balances[target_user_id] = user_balances.get(target_user_id, 0) + amount
+        update_user_balance(target_user_id, amount)
         
         # Notify user
         await context.bot.send_message(
@@ -940,7 +940,7 @@ async def handle_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         await update.message.reply_text(
             f"✅ Added {amount} points to user {target_user_id}\n"
-            f"New balance: {user_balances[target_user_id]} points"
+            f"New balance: {get_user_balance(target_user_id)} points"
         )
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -964,14 +964,14 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text("❌ Amount must be positive!")
             return
         
-        current_balance = user_balances.get(target_user_id, 0)
+        current_balance = get_user_balance(target_user_id)
         if current_balance < amount:
             await update.message.reply_text(
                 f"❌ User only has {current_balance} points, cannot deduct {amount} points!"
             )
             return
         
-        user_balances[target_user_id] = current_balance - amount
+        update_user_balance(target_user_id, -amount)
         
         # Notify user
         await context.bot.send_message(
@@ -981,7 +981,7 @@ async def handle_deduct_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         await update.message.reply_text(
             f"✅ Deducted {amount} points from user {target_user_id}\n"
-            f"New balance: {user_balances[target_user_id]} points"
+            f"New balance: {get_user_balance(target_user_id)} points"
         )
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -1073,7 +1073,7 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     amount = coupon_data['amount']
-    user_balances[user.id] = user_balances.get(user.id, 0) + amount
+    update_user_balance(user.id, amount)
     used_coupons[code].append(user.id)
     
     # Calculate remaining time
@@ -1083,7 +1083,7 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         f"🎉 Coupon code redeemed successfully!\n"
         f"Added ₦{amount} to your balance.\n"
-        f"New balance: ₦{user_balances[user.id]}\n\n"
+        f"New balance: ₦{get_user_balance(user.id)}\n\n"
         f"Note: This code will expire in {minutes_remaining} minutes"
     )
     
@@ -1148,7 +1148,7 @@ async def process_weekly_rewards(context: ContextTypes.DEFAULT_TYPE):
         # Reward the top 2 referrers
         for i, (user_id, ref_count) in enumerate(top_referrers):
             reward = 1000 if i == 0 else 500  # 1st gets 1000, 2nd gets 500
-            user_balances[user_id] = user_balances.get(user_id, 0) + reward
+            update_user_balance(user_id, reward)
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
@@ -1193,8 +1193,8 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         target_user_id = int(context.args[0])
-        balance = user_balances.get(target_user_id, 0)
-        ref_count = len(referrals.get(target_user_id, set()))
+        balance = get_user_balance(target_user_id)
+        ref_count = len(get_referrals(target_user_id))
         total_earnings = ref_count * REFERRAL_BONUS
         last_signin_date = last_signin.get(target_user_id, None)
 
@@ -1265,7 +1265,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if daily_chat_count[chat.id] < MAX_DAILY_CHAT_REWARD:
         daily_chat_count[chat.id] += 1
         for member_id in user_balances.keys():
-            user_balances[member_id] = user_balances.get(member_id, 0) + CHAT_REWARD
+            update_user_balance(member_id, CHAT_REWARD)
         await update.message.reply_text(
             f"💬 Thanks for being active in the group! Each member earned ₦{CHAT_REWARD}.\n"
             f"Today's group chat earnings: {daily_chat_count[chat.id]}/50."
@@ -1318,7 +1318,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif query.data == 'balance':
-        balance = user_balances.get(user_id, 0)
+        balance = get_user_balance(user_id)
         await query.answer()
         await query.message.edit_text(
             f"Your current balance: {balance} points (₦{balance}) 💰",
@@ -1426,7 +1426,7 @@ async def handle_task_approval(update: Update, context: ContextTypes.DEFAULT_TYP
         target_user_id = int(context.args[0])
         
         # Add reward to user's balance
-        user_balances[target_user_id] = user_balances.get(target_user_id, 0) + TASK_REWARD
+        update_user_balance(target_user_id, TASK_REWARD)
         
         # Notify user
         await context.bot.send_message(
@@ -1507,7 +1507,7 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
                 f"• ID: {referrer_id}\n"
                 f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
                 f"• Username: @{referrer.username if referrer.username else 'None'}\n"
-                f"• Total Referrals: {len(referrals.get(referrer_id, set()))}"
+                f"• Total Referrals: {len(get_referrals(referrer_id))}"
             )
         else:
             admin_message += "Direct Join (No Referrer)"
@@ -1639,9 +1639,9 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_quiz_status[user_id] = datetime.now().date()
 
         # Reward the user
-        user_balances[user_id] = user_balances.get(user_id, 0) + 50
+        update_user_balance(user_id, 50)
         await query.message.edit_text(
-            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{user_balances[user_id]}.",
+            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{get_user_balance(user_id)}.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
     else:
@@ -1657,7 +1657,7 @@ MILESTONES = [50, 100, 200]  # Define referral milestones
 
 async def check_milestones(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """Check if the user has reached a referral milestone"""
-    ref_count = len(referrals.get(user_id, set()))
+    ref_count = len(get_referrals(user_id))
     for milestone in MILESTONES:
         if ref_count == milestone:
             await context.bot.send_message(
@@ -1665,7 +1665,7 @@ async def check_milestones(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 text=f"🎉 Congratulations! You've reached {milestone} referrals and earned a special reward!"
             )
             # Add a reward for reaching the milestone
-            user_balances[user_id] = user_balances.get(user_id, 0) + 1000  # Example reward
+            update_user_balance(user_id, 1000)  # Example reward
             break
 
 # Add transaction history
@@ -1750,7 +1750,7 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
             is_member = await check_membership(referred_id, context)
             if not is_member:
                 # Deduct balance from referrer
-                user_balances[referrer_id] = max(0, user_balances.get(referrer_id, 0) - LEAVE_PENALTY)
+                update_user_balance(referrer_id, -LEAVE_PENALTY)
 
                 # Notify referrer about the deduction
                 try:
@@ -2027,10 +2027,10 @@ def main():
                 is_member = await check_membership(referred_id, context)
                 if not is_member:
                     # Deduct 100 NGN from referrer
-                    user_balances[referrer_id] = max(0, user_balances.get(referrer_id, 0) - 100)
+                    update_user_balance(referrer_id, -100)
 
                     # Deduct 100 NGN from the user who left
-                    user_balances[referred_id] = max(0, user_balances.get(referred_id, 0) - 100)
+                    update_user_balance(referred_id, -100)
 
                     # Remove the referral
                     referred_users.remove(referred_id)
