@@ -2038,3 +2038,15 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Add back user_quiz_status for quiz tracking
+user_quiz_status = {}
+
+# Add back show_verification_menu for verification step
+async def show_verification_menu(update, context):
+    keyboard = [[InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "🔒 Please verify your membership by joining our channel and group before using the bot.",
+        reply_markup=reply_markup
+    )
