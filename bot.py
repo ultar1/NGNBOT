@@ -1719,7 +1719,6 @@ async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_inactivity():
     """Check for inactive users and take appropriate actions."""
-    inactive_users```python
     inactive_users = []
     current_time = datetime.now()
 
