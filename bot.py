@@ -1769,78 +1769,6 @@ async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE)
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Received update: {update}")
 
-# Define the file path for storing user balances
-USER_BALANCES_FILE = "user_balances.json"
-
-def load_user_balances():
-    """Load user balances from the JSON file."""
-    try:
-        with open(USER_BALANCES_FILE, "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_user_balances():
-    """Save user balances to the JSON file."""
-    with open(USER_BALANCES_FILE, "w") as file:
-        json.dump(user_balances, file)
-
-# Load user balances at startup
-user_balances = load_user_balances()
-
-# Update user balance whenever it changes
-def update_user_balance(user_id, amount):
-    """Update the balance of a user and save it to the file."""
-    user_balances[user_id] = user_balances.get(user_id, 0) + amount
-    save_user_balances()
-
-# Define file paths for storing data
-REFERRALS_FILE = "referrals.json"
-USER_ACTIVITIES_FILE = "user_activities.json"
-USER_BALANCES_FILE = "user_balances.json"
-
-# Generalized function to load data from a JSON file
-def load_data(file_path):
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-# Generalized function to save data to a JSON file
-def save_data(file_path, data):
-    with open(file_path, "w") as file:
-        json.dump(data, file)
-
-# Load data at startup
-user_balances = load_data(USER_BALANCES_FILE)
-user_activities = load_data(USER_ACTIVITIES_FILE)
-referrals = load_data(REFERRALS_FILE)
-
-# Save user balances whenever they are updated
-def update_user_balance(user_id, amount):
-    user_balances[user_id] = user_balances.get(user_id, 0) + amount
-    save_data(USER_BALANCES_FILE, user_balances)
-
-# Save user activities whenever they are updated
-def log_user_activity(user_id, activity):
-    user_activities.setdefault(user_id, []).append({
-        "activity": activity,
-        "timestamp": datetime.now().isoformat()
-    })
-    save_data(USER_ACTIVITIES_FILE, user_activities)
-
-# Save referrals whenever they are updated
-def update_referrals(user_id, referred_id):
-    referrals.setdefault(user_id, set()).add(referred_id)
-    save_data(REFERRALS_FILE, referrals)
-
-# Ensure JSON files are created if they don't exist
-for file_path in [USER_BALANCES_FILE, REFERRALS_FILE, USER_ACTIVITIES_FILE]:
-    if not os.path.exists(file_path):
-        with open(file_path, "w") as file:
-            json.dump({}, file)
-
 # Database connection setup
 DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
 def get_db_connection():
@@ -1984,33 +1912,6 @@ initialize_database()
 
 # Periodic saving interval in seconds
 SAVE_INTERVAL = 300  # Save every 5 minutes
-
-def periodic_save():
-    """Periodically save user activities and balances."""
-    save_user_activities()
-    save_user_balances()
-    logging.info("Periodic save completed.")
-
-# Save data on bot shutdown
-def save_on_exit():
-    logging.info("Saving data on exit...")
-    save_user_activities()
-    save_user_balances()
-
-# atexit.register(save_on_exit)
-
-# Start the periodic saving task
-async def start_periodic_saving():
-    """Periodically save user data to JSON files."""
-    while True:
-        try:
-            save_user_balances()
-            logging.info("User data saved successfully.")
-        except Exception as e:
-            logging.error(f"Error saving user data: {e}")
-        await asyncio.sleep(300)  # Save every 5 minutes
-
-asyncio.create_task(start_periodic_saving())
 
 def main():
     # Get environment variables with fallbacks
