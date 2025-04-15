@@ -1714,6 +1714,7 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         f"📊 Admin Dashboard:\n\n"
         f"• Total Users: {total_users}\n"
+```
         f"• Total Referrals: {total_referrals}\n"
         f"• Total Balance Across Users: ₦{total_balance}\n"
         f"• Total Withdrawals: ₦{total_withdrawals}\n"
@@ -2168,4 +2169,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
