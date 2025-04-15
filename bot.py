@@ -350,19 +350,9 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 # Database connection setup
-DATABASE_URL = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
-from urllib.parse import urlparse
-
+DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
 def get_db_connection():
-    result = urlparse(DATABASE_URL)
-    return psycopg2.connect(
-        dbname=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port,
-        cursor_factory=RealDictCursor
-    )
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # Ensure database tables exist
 
@@ -374,16 +364,11 @@ def initialize_database():
                     user_id BIGINT PRIMARY KEY,
                     balance INT DEFAULT 0
                 );
+
                 CREATE TABLE IF NOT EXISTS referrals (
                     referrer_id BIGINT,
                     referred_id BIGINT,
                     PRIMARY KEY (referrer_id, referred_id)
-                );
-                CREATE TABLE IF NOT EXISTS user_activities (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    activity TEXT,
-                    timestamp TIMESTAMP DEFAULT NOW()
                 );
             """)
             conn.commit()
@@ -450,9 +435,6 @@ def get_bot_activities(user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command with verification check"""
     user = update.effective_user
-
-    # Log the /start command activity
-    log_user_activity(user.id, "Started the bot")
 
     # Extract referrer ID from the start parameter
     args = context.args
@@ -1724,12 +1706,10 @@ async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Total Users: {total_users}\n"
         f"• Total Referrals: {total_referrals}\n"
         f"• Total Balance Across Users: ₦{total_balance}\n"
-        f
-        "1. Join our channel\n"
-        "2. Join our group\n"
-        "3. Click 'Verify Membership' button",
-        reply_markup=reply_markup
+        f"• Total Withdrawals: ₦{total_withdrawals}\n"
+        f"• Pending Withdrawals: {pending_withdrawals}\n"
     )
+    await update.message.reply_text(message)
 
 # Define periodic_tasks function
 async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
@@ -1739,6 +1719,7 @@ async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_inactivity():
     """Check for inactive users and take appropriate actions."""
+    inactive_users```python
     inactive_users = []
     current_time = datetime.now()
 
@@ -2168,21 +2149,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-            )
-        else:
-            admin_message += "Direct Join (No Referrer)"
-        
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_message
-        )
-    except Exception as e:
-        print(f"Failed to send admin notification: {e}")
-
-# Expand quiz data to 50 harder and clearer questions
-quiz_data = [
-    {"question": "What year did the Titanic sink?", "options": ["1912", "1905", "1920"], "answer": "1912"},
-    {"question": "Who painted the Mona Lisa?", "options": ["Leonardo da Vinci", "Pablo Picasso", "Vincent van Gogh"], "answer": "Leonardo da Vinci"},
-    {"question": "What is the smallest planet in our solar system?", "options": ["Mercury", "Mars", "Venus"], "answer": "Mercury"},
-    {"question": "Which country won the FIFA World Cup in 2018?", "options": ["France", "Croatia", "Germany"], "answer": "France"},
-    {"question": "What is the capital of Australia?", "options": ["Canberra", "Sydney", "Melbourne"], "answer": "Canberra"},
+```
