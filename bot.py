@@ -2138,7 +2138,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
@@ -2175,6 +2175,7 @@ def main():
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     application.add_handler(CommandHandler("history", show_transaction_history))
     application.add_handler(CommandHandler("db", admin_dashboard))
+    application.add_handler(CommandHandler("del", handle_del_command))  # Register /del command
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
@@ -2395,3 +2396,94 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
         # Handle error gracefully
         if update.callback_query:
             await update.callback_query.answer("An error occurred. Please try /start again.")
+
+async def handle_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete user account and data from database"""
+    user = update.effective_user
+    
+    if not await is_admin(user.id):
+        if len(context.args) > 0:
+            await update.message.reply_text("❌ Only admins can delete other users!")
+            return
+            
+        # Allow users to delete their own account
+        user_id = user.id
+    else:
+        # Admin can delete any account
+        if not context.args:
+            await update.message.reply_text("❌ Usage: /del <user_id>")
+            return
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ Invalid user ID!")
+            return
+    
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Delete from all related tables
+                cur.execute("DELETE FROM user_balances WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM referrals WHERE referrer_id = %s OR referred_id = %s", (user_id, user_id))
+                cur.execute("DELETE FROM user_verification WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_bank WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_withdrawal_time WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_activities WHERE user_id = %s", (user_id,))
+                conn.commit()
+                
+                if await is_admin(user.id):
+                    await update.message.reply_text(f"✅ Successfully deleted user {user_id} from database!")
+                else:
+                    await update.message.reply_text("✅ Your account has been deleted. Use /start to create a new account.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error deleting user: {str(e)}")
+
+async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's earning and withdrawal history"""
+    user_id = update.effective_user.id
+    
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get earnings history
+                cur.execute("""
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%earning%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                """, (user_id,))
+                earnings = cur.fetchall()
+                
+                # Get withdrawal history
+                cur.execute("""
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                """, (user_id,))
+                withdrawals = cur.fetchall()
+        
+        # Format message
+        message = "📊 Your Transaction History\n\n"
+        
+        message += "💰 Recent Earnings:\n"
+        if earnings:
+            for earning in earnings:
+                date = earning['timestamp'].strftime("%Y-%m-%d")
+                message += f"• {date}: +₦{earning['amount']} ({earning['activity']})\n"
+        else:
+            message += "No recent earnings\n"
+        
+        message += "\n💸 Recent Withdrawals:\n"
+        if withdrawals:
+            for withdrawal in withdrawals:
+                date = withdrawal['timestamp'].strftime("%Y-%m-%d")
+                message += f"• {date}: -₦{withdrawal['amount']} ({withdrawal['activity']})\n"
+        else:
+            message += "No recent withdrawals\n"
+            
+        await update.message.reply_text(message)
+    except Exception as e:
+        await update.message.reply_text("❌ Error fetching history. Please try again later.")
