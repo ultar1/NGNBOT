@@ -708,20 +708,23 @@ async def handle_bank_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ACCOUNT_NAME
 
+# --- BANK DETAILS: Always save to DB for future use ---
+# In handle_account_name, after collecting account_name, save to DB
 async def handle_account_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle account name input"""
+    # ...existing code...
     user_id = update.effective_user.id
     account_name = update.message.text.strip()
-    
     if len(account_name) < 3:
         await update.message.reply_text(
             "❌ Invalid account name! Name must be at least 3 characters long.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
         )
         return ACCOUNT_NAME
-    
-    # Save account name
     context.user_data['withdrawal']['account_name'] = account_name
+    # Save bank details to DB for future use
+    wd = context.user_data['withdrawal']
+    save_user_bank(user_id, wd['account_number'], wd['bank'], account_name)
+    # ...existing code...
     
     # Show amount selection
     balance = get_user_balance(user_id)
