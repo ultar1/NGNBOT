@@ -279,7 +279,6 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
     else:
-        # If update is a Message object directly
         await update.edit_text(
             message_text,
             reply_markup=reply_markup
@@ -575,20 +574,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check verification status
     verified = is_user_verified(user.id)
     if not verified:
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-            [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "🔒 Please join our channel and group to use this bot!\n\n"
-            "1. Click the buttons below to join\n"
-            "2. After joining, click 'Verify Membership'\n"
-            "3. You'll receive your welcome bonus after verification!",
-            reply_markup=reply_markup
-        )
+        await show_verification_menu(update, context)
         return
 
     # User is verified, show dashboard
@@ -1470,17 +1456,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_member = await check_membership(user_id, context)
         if is_member:
             set_user_verified(user_id, True)
-            await query.message.edit_text(
-                "✅ Verification successful! Welcome to the bot.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Go to Dashboard", callback_data='back_to_menu')]])
-            )
+            await show_dashboard(update, context)
         else:
             await show_join_message(update, context)
         return
 
-    # Only allow other actions if user is verified
+    # For all other buttons, show dashboard if not verified
     if not is_user_verified(user_id):
-        await show_verification_menu(update, context)
+        await show_dashboard(update, context)
         return
 
     # Handle other buttons for verified users
@@ -2134,7 +2117,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
@@ -2282,3 +2265,41 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except:
         pass
+
+async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the user's quiz answer"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    selected_option = query.data.replace('quiz_', '')
+
+    # Check if quiz is still active
+    if not context.user_data.get('quiz_active', False):
+        await query.answer("❌ Quiz time expired! Try again tomorrow.")
+        return
+
+    # Get the correct answer
+    correct_answer = context.user_data.get('quiz_answer')
+    if not correct_answer:
+        await query.answer("❌ Something went wrong. Please try again later.")
+        return
+
+    # Mark quiz as no longer active
+    context.user_data['quiz_active'] = False
+
+    if selected_option == correct_answer:
+        # Mark quiz as completed for today
+        user_quiz_status[user_id] = datetime.now().date()
+
+        # Reward the user
+        update_user_balance(user_id, 50)
+        await query.message.edit_text(
+            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{get_user_balance(user_id)}.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+    else:
+        # Mark quiz as failed for today
+        user_quiz_status[user_id] = datetime.now().date()
+        await query.message.edit_text(
+            f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
