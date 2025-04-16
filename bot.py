@@ -2081,6 +2081,20 @@ initialize_database()
 # Periodic saving interval in seconds
 SAVE_INTERVAL = 300  # Save every 5 minutes
 
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log the error and send a telegram message to notify the developer."""
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+    
+    # Send error message to admin
+    error_message = f"❌ An error occurred: {context.error}"
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID, 
+            text=error_message
+        )
+    except:
+        logging.error("Failed to send error message to admin")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
