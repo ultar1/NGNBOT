@@ -1718,7 +1718,7 @@ quiz_data = [
 
 # Update quiz retry logic to use a 10-second timer
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the quiz menu with a random question and a 10-second timer"""
+    """Show quiz menu with a random question"""
     user_id = update.effective_user.id
     today = datetime.now().date()
 
@@ -1743,27 +1743,12 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Create buttons for options
     keyboard = [[InlineKeyboardButton(option, callback_data=f'quiz_{option}')] for option in options]
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
-    if not correct_answer:
-        await query.answer("❌ Something went wrong. Please try again later.")
-        return
 
-    if selected_option == correct_answer:
-        # Mark quiz as completed for today
-        user_quiz_status[user_id] = datetime.now().date()
-
-        # Reward the user
-        update_user_balance(user_id, 50)
-        await query.message.edit_text(
-            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{get_user_balance(user_id)}.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-        )
-    else:
-        # Mark quiz as failed for today
-        user_quiz_status[user_id] = datetime.now().date()
-        await query.message.edit_text(
-            f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-        )
+    # Show the question
+    await update.callback_query.message.edit_text(
+        f"📝 Quiz Question:\n\n{question}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # Update referral milestones to start from 50
 MILESTONES = [50, 100, 200]  # Define referral milestones
