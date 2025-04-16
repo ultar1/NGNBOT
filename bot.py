@@ -2114,3 +2114,4 @@ async def show_verification_menu(update, context):
         "🔒 Please verify your membership by joining our channel and group before using the bot.",
         reply_markup=reply_markup
     )
+```
