@@ -2068,6 +2068,10 @@ def main():
     # Register error handler
     application.add_error_handler(error_handler)
 
+    # Register quiz handlers
+    application.add_handler(CallbackQueryHandler(show_quiz_menu, pattern="^quiz$"))
+    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern="^quiz_.*"))
+
     # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
         entry_points=[
