@@ -2282,3 +2282,44 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
+
+# Define the show_verification_menu function near the top of the file
+async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show verification menu with channel and group join buttons"""
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    message_text = (
+        "🔒 Please join our channel and group to use this bot!\n\n"
+        "1. Click the buttons below to join\n"
+        "2. After joining, click 'Verify Membership'\n"
+        "3. You'll receive your welcome bonus after verification!"
+    )
+
+    if update.message:
+        await update.message.reply_text(message_text, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
+
+# Update the /start command to use the show_verification_menu function
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the start command"""
+    user = update.effective_user
+    args = context.args
+
+    # Handle referral
+    if args:
+        try:
+            referrer_id = int(args[0])
+            if referrer_id != user.id:  # Prevent self-referral
+                pending_referrals[user.id] = referrer_id
+                logging.info(f"Stored pending referral: {referrer_id} -> {user.id}")
+        except ValueError:
+            logging.warning(f"Invalid referrer ID: {args[0]}")
+
+    # Always show verification menu on /start
+    await show_verification_menu(update, context)
