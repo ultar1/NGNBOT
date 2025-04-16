@@ -1413,30 +1413,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == 'check_membership':
+        await query.answer("🔄 Checking membership status...")
         is_member = await check_membership(user_id, context)
-        if (is_member):
-            await query.answer("✅ Membership verified!")
-            await show_dashboard(update, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await query.message.edit_text(
+                "✅ Verification successful! Welcome to the bot.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Go to Dashboard", callback_data='back_to_menu')]])
+            )
         else:
-            await query.answer("❌ Please join both the channel and group!")
-            await show_join_message(query.message, context)
+            await show_join_message(update, context)
         return
 
+    # Only allow other actions if user is verified
+    if not is_user_verified(user_id):
+        await show_verification_menu(update, context)
+        return
+
+    # Handle other buttons for verified users
     if query.data == 'back_to_menu':
         await query.answer("🔙 Returning to main menu...")
         await show_dashboard(update, context)
-        return
-
     elif query.data == 'my_referrals':
         await query.answer()
         await show_referral_menu(update, context)
-        return
-
     elif query.data == 'top_referrals':
         await query.answer()
         await show_top_referrals(update, context)
-        return
-
     elif query.data == 'daily_bonus':
         daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
         if daily_bonus_earned:
@@ -1447,8 +1450,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             await query.answer("❌ You have already claimed your daily bonus today!")
-        return
-
     elif query.data == 'balance':
         balance = get_user_balance(user_id)
         await query.answer()
@@ -1456,36 +1457,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Your current balance: {balance} points (₦{balance}) 💰",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
-        return
-
     elif query.data == 'tasks':
         await handle_tasks_button(update, context)
-        return
-
-    elif query.data == 'use_saved_account':
-        saved_info = user_bank_info.get(user_id)
-        if saved_info:
-            context.user_data['withdrawal'] = saved_info.copy()
-            await handle_amount_selection(update, context)
-        return
-
-    elif query.data == 'new_account':
-        await query.message.edit_text(
-            "Please enter your account number (10 digits):",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
-        )
-        return ACCOUNT_NUMBER
-
-    # Handle quiz button
-    if query.data == 'quiz':
+    elif query.data == 'quiz':
         await show_quiz_menu(update, context)
-        return
-
-    if query.data.startswith('quiz_'):
+    elif query.data.startswith('quiz_'):
         await handle_quiz_answer(update, context)
-        return
-
-    await query.answer("❌ Unknown action.")
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
@@ -2060,6 +2037,16 @@ def main():
 
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
+
+    print("Starting bot initialization...")
+
+    # Initialize bot application
+    application = Application.builder().token(token).build()
+
+    # Define withdrawal handler
+    withdrawal_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
             CallbackQueryHandler(handle_bank_name, pattern="^bank_")
         ],
         states={
