@@ -2189,6 +2189,33 @@ async def handle_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     await update.message.reply_text("✅ Your account has been deleted. Use /start to create a new account.")
     except Exception as e:
         await update.message.reply_text(f"❌ Error deleting user: {str(e)}")
+async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show verification menu with channel and group join buttons"""
+    try:
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+            [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message_text = (
+            "🔒 Please join our channel and group to use this bot!\n\n"
+            "1. Join our channel\n"
+            "2. Join our group\n"
+            "3. Click 'Check Membership' button"
+        )
+
+        # Handle both new messages and callback queries
+        if update.message:
+            await update.message.reply_text(message_text, reply_markup=reply_markup)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
+    except Exception as e:
+        logging.error(f"Error in show_verification_menu: {e}")
+        # Handle error gracefully
+        if update.callback_query:
+            await update.callback_query.answer("An error occurred. Please try /start again.")
 
 def main():
     # Get environment variables with fallbacks
