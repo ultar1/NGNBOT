@@ -569,9 +569,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Always show join message for both new and existing users
-    await show_verification_menu(update, context)
-    return
+    # Always show verification menu first, regardless of user status
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_text = (
+        "🔒 Please join our channel and group to use this bot!\n\n"
+        "1. Click the buttons below to join\n"
+        "2. After joining, click 'Check Membership'\n"
+        "3. You'll receive your welcome bonus after verification!"
+    )
+    
+    await update.message.reply_text(message_text, reply_markup=reply_markup)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
@@ -2242,7 +2255,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the user's quiz answer"""
+    """Handle quiz answer submissions"""
     query = update.callback_query
     user_id = query.from_user.id
     selected_option = query.data.replace('quiz_', '')
@@ -2258,13 +2271,11 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer("❌ Something went wrong. Please try again later.")
         return
 
-    # Mark quiz as no longer active
+    # Mark quiz as completed for today
+    user_quiz_status[user_id] = datetime.now().date()
     context.user_data['quiz_active'] = False
 
     if selected_option == correct_answer:
-        # Mark quiz as completed for today
-        user_quiz_status[user_id] = datetime.now().date()
-
         # Reward the user
         update_user_balance(user_id, 50)
         await query.message.edit_text(
@@ -2272,8 +2283,6 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
     else:
-        # Mark quiz as failed for today
-        user_quiz_status[user_id] = datetime.now().date()
         await query.message.edit_text(
             f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
