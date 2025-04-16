@@ -2055,6 +2055,40 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         logging.error("Failed to send error message to admin")
 
+async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle quiz answer submissions"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    selected_option = query.data.replace('quiz_', '')
+
+    # Check if quiz is still active
+    if not context.user_data.get('quiz_active', False):
+        await query.answer("❌ Quiz time expired! Try again tomorrow.")
+        return
+
+    # Get the correct answer
+    correct_answer = context.user_data.get('quiz_answer')
+    if not correct_answer:
+        await query.answer("❌ Something went wrong. Please try again later.")
+        return
+
+    # Mark quiz as completed for today
+    user_quiz_status[user_id] = datetime.now().date()
+    context.user_data['quiz_active'] = False
+
+    if selected_option == correct_answer:
+        # Reward the user
+        update_user_balance(user_id, 50)
+        await query.message.edit_text(
+            f"✅ Correct! You have earned ₦50.\nYour new balance is ₦{get_user_balance(user_id)}.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+    else:
+        await query.message.edit_text(
+            f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
