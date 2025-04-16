@@ -2354,3 +2354,104 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Always show verification menu on /start
     await show_verification_menu(update, context)
     return
+
+async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show verification menu with channel and group join buttons"""
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_text = (
+        "🔒 Please join our channel and group to use this bot!\n\n"
+        "1. Join our channel\n"
+        "2. Join our group\n"
+        "3. Click 'Check Membership' button"
+    )
+
+    # Handle both new messages and callback queries
+    if isinstance(update, Update):
+        if update.callback_query:
+            await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(message_text, reply_markup=reply_markup)
+
+async def check_membership(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Check if user is member of required channel and group"""
+    try:
+        # Check channel membership
+        channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+        
+        # Check group membership
+        group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+        
+        valid_status = [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER
+        ]
+        
+        is_member = (
+            channel_member.status in valid_status and 
+            group_member.status in valid_status
+        )
+        
+        return is_member
+    except Exception as e:
+        logging.error(f"Error checking membership for user {user_id}: {e}")
+        return False
+
+async def handle_check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the check membership button click"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    await query.answer("Checking membership status...")
+    
+    is_member = await check_membership(user_id, context)
+    if is_member:
+        # Mark user as verified
+        set_user_verified(user_id, True)
+        
+        # Handle welcome bonus for new users
+        current_balance = get_user_balance(user_id)
+        if current_balance == 0:
+            update_user_balance(user_id, WELCOME_BONUS)
+            await query.message.reply_text(
+                f"🎉 Welcome! You've received ₦{WELCOME_BONUS} as a welcome bonus!"
+            )
+        
+        # Process referral if exists
+        referrer_id = pending_referrals.get(user_id)
+        if referrer_id and referrer_id != user_id:
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
+            
+            try:
+                # Notify referrer
+                await context.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
+                )
+            except Exception as e:
+                logging.error(f"Failed to notify referrer: {e}")
+            
+            # Clean up pending referral
+            pending_referrals.pop(user_id, None)
+        
+        # Show dashboard
+        await show_dashboard(update, context)
+    else:
+        await query.message.edit_text(
+            "❌ Please join both our channel and group to use this bot!\n\n"
+            "1. Join our channel\n"
+            "2. Join our group\n"
+            "3. Click 'Check Membership' again",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+                [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+                [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+            ])
+        )
