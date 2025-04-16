@@ -2068,13 +2068,14 @@ def main():
 
     # Initialize bot application
     application = Application.builder().token(token).build()
-    
+
+    # Register handlers first
+    # Register quiz handlers - moved before using them
+    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern="^quiz_.*"))
+    application.add_handler(CallbackQueryHandler(show_quiz_menu, pattern="^quiz$"))
+
     # Register error handler
     application.add_error_handler(error_handler)
-
-    # Register quiz handlers
-    application.add_handler(CallbackQueryHandler(show_quiz_menu, pattern="^quiz$"))
-    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern="^quiz_.*"))
 
     # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
@@ -2164,9 +2165,6 @@ def main():
 
     # Schedule periodic tasks
     application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
-
-    # Start the periodic saving task
-    asyncio.create_task(start_periodic_saving())
 
     # Update referral membership deduction to deduct ₦100 instead of ₦1000
     async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
