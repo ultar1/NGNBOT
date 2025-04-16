@@ -2059,7 +2059,7 @@ def add_referral(referrer_id, referred_id):
 
 def get_referrals(referrer_id):
     with get_db_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor() as cur):
             cur.execute("SELECT referred_id FROM referrals WHERE referrer_id = %s", (referrer_id,))
             return [row['referred_id'] for row in cur.fetchall()]
 
