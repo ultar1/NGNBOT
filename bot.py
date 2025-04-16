@@ -13,6 +13,7 @@ import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from urllib.parse import urlparse
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -85,6 +86,23 @@ last_weekly_reward = datetime.now()
     PAYMENT_SCREENSHOT,  # Added payment screenshot state
     LANGUAGE_SELECTION  # Added language selection state
 ) = range(6)  # Updated range to include new state
+
+LOADING_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+async def show_loading_animation(message, loading_text="Loading", duration=2):
+    """Show a loading animation for the specified duration"""
+    start_time = time.time()
+    current_frame = 0
+    
+    while time.time() - start_time < duration:
+        frame = LOADING_CHARS[current_frame]
+        try:
+            await message.edit_text(f"{frame} {loading_text}...")
+            current_frame = (current_frame + 1) % len(LOADING_CHARS)
+            await asyncio.sleep(0.2)
+        except Exception as e:
+            logging.error(f"Error updating loading animation: {e}")
+            break
 
 def generate_coupon_code(length=8):
     """Generate a random coupon code"""
