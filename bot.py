@@ -2236,7 +2236,7 @@ def main():
     application.add_handler(CommandHandler("deduct", handle_deduct_command))
     application.add_handler(CommandHandler("history", show_transaction_history))
     application.add_handler(CommandHandler("db", admin_dashboard))
-    application.add_handler(CommandHandler("del", handle_del_command))  # Register /del command
+    application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
