@@ -2149,6 +2149,46 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"❌ Wrong answer! The correct answer was: {correct_answer}. Try again tomorrow!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
+async def handle_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete user account and data from database"""
+    user = update.effective_user
+
+    if not await is_admin(user.id):
+        if len(context.args) > 0:
+            await update.message.reply_text("❌ Only admins can delete other users!")
+            return
+
+        # Allow users to delete their own account
+        user_id = user.id
+    else:
+        # Admin can delete any account
+        if not context.args:
+            await update.message.reply_text("❌ Usage: /del <user_id>")
+            return
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ Invalid user ID!")
+            return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Delete from all related tables
+                cur.execute("DELETE FROM user_balances WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM referrals WHERE referrer_id = %s OR referred_id = %s", (user_id, user_id))
+                cur.execute("DELETE FROM user_verification WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_bank WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_withdrawal_time WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM user_activities WHERE user_id = %s", (user_id,))
+                conn.commit()
+
+                if await is_admin(user.id):
+                    await update.message.reply_text(f"✅ Successfully deleted user {user_id} from database!")
+                else:
+                    await update.message.reply_text("✅ Your account has been deleted. Use /start to create a new account.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error deleting user: {str(e)}")
 
 def main():
     # Get environment variables with fallbacks
@@ -2452,47 +2492,6 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
         # Handle error gracefully
         if update.callback_query:
             await update.callback_query.answer("An error occurred. Please try /start again.")
-
-async def handle_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Delete user account and data from database"""
-    user = update.effective_user
-    
-    if not await is_admin(user.id):
-        if len(context.args) > 0:
-            await update.message.reply_text("❌ Only admins can delete other users!")
-            return
-            
-        # Allow users to delete their own account
-        user_id = user.id
-    else:
-        # Admin can delete any account
-        if not context.args:
-            await update.message.reply_text("❌ Usage: /del <user_id>")
-            return
-        try:
-            user_id = int(context.args[0])
-        except ValueError:
-            await update.message.reply_text("❌ Invalid user ID!")
-            return
-    
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Delete from all related tables
-                cur.execute("DELETE FROM user_balances WHERE user_id = %s", (user_id,))
-                cur.execute("DELETE FROM referrals WHERE referrer_id = %s OR referred_id = %s", (user_id, user_id))
-                cur.execute("DELETE FROM user_verification WHERE user_id = %s", (user_id,))
-                cur.execute("DELETE FROM user_bank WHERE user_id = %s", (user_id,))
-                cur.execute("DELETE FROM user_withdrawal_time WHERE user_id = %s", (user_id,))
-                cur.execute("DELETE FROM user_activities WHERE user_id = %s", (user_id,))
-                conn.commit()
-                
-                if await is_admin(user.id):
-                    await update.message.reply_text(f"✅ Successfully deleted user {user_id} from database!")
-                else:
-                    await update.message.reply_text("✅ Your account has been deleted. Use /start to create a new account.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error deleting user: {str(e)}")
 
 async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user's earning and withdrawal history"""
