@@ -530,17 +530,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     # Always show verification menu first if not verified
     if not is_user_verified(user.id):
-        # Show a menu with a button to verify membership
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-            [InlineKeyboardButton("✅ I've Joined, Verify Me", callback_data='verify_membership')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "🔒 Please join our channel and group to use the bot. After joining, click the button below to verify.",
-            reply_markup=reply_markup
-        )
+        await show_verification_menu(update, context)
         return
     # If verified, show main menu
     await show_dashboard(update, context)
