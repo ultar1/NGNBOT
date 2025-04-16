@@ -2287,14 +2287,14 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
     keyboard = [
         [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
         [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     message_text = (
         "🔒 Please join our channel and group to use this bot!\n\n"
         "1. Click the buttons below to join\n"
-        "2. After joining, click 'Verify Membership'\n"
+        "2. After joining, click 'Check Membership'\n"
         "3. You'll receive your welcome bonus after verification!"
     )
 
