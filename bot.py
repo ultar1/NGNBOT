@@ -536,23 +536,51 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle verification button click"""
     query = update.callback_query
     user_id = query.from_user.id
+    
+    # Check membership
     await query.answer("Checking membership status...")
     is_member = await check_membership(user_id, context)
     if not is_member:
         await show_join_message(update, context)
         return
+
+    # Mark as verified in database
     set_user_verified(user_id, True)
-    # Welcome bonus and referral bonus
-    if get_user_balance(user_id) == 0:
+    
+    # Handle welcome bonus
+    current_balance = get_user_balance(user_id)
+    if current_balance == 0:  # Only give welcome bonus to new users
         update_user_balance(user_id, WELCOME_BONUS)
-        referrer_id = pending_referrals.pop(user_id, None)
+        await query.message.reply_text(
+            f"🎉 Welcome! You've received ₦{WELCOME_BONUS} as a welcome bonus!"
+        )
+        
+        # Process referral if exists
+        referrer_id = pending_referrals.get(user_id)
         if referrer_id and referrer_id != user_id:
-            add_referral(referrer_id, user_id)
-            update_user_balance(referrer_id, REFERRAL_BONUS)
-            await context.bot.send_message(referrer_id, f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!")
-        await query.message.reply_text(f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!")
+            # Check if referrer is still a member
+            referrer_is_member = await check_membership(referrer_id, context)
+            if referrer_is_member:
+                # Add referral and credit bonus
+                add_referral(referrer_id, user_id)
+                update_user_balance(referrer_id, REFERRAL_BONUS)
+                
+                # Notify referrer
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to notify referrer: {e}")
+                    
+            # Clean up pending referral
+            pending_referrals.pop(user_id, None)
+    
+    # Show dashboard
     await show_dashboard(update, context)
     return
 
