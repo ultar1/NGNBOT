@@ -1445,6 +1445,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
+    await query.answer()  # Acknowledge the button click immediately
 
     # Handle verification button
     if query.data == 'verify_membership':
@@ -1452,43 +1453,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == 'check_membership':
-        await query.answer("🔄 Checking membership status...")
         is_member = await check_membership(user_id, context)
         if is_member:
             set_user_verified(user_id, True)
+            # After verification, show dashboard
             await show_dashboard(update, context)
         else:
-            await show_join_message(update, context)
+            await show_verification_menu(update, context)
         return
 
-    # For all other buttons, show dashboard if not verified
+    # Only proceed with other buttons if user is verified
     if not is_user_verified(user_id):
-        await show_dashboard(update, context)
+        await show_verification_menu(update, context)
         return
 
-    # Handle other buttons for verified users
+    # Handle other buttons
     if query.data == 'back_to_menu':
-        await query.answer("🔙 Returning to main menu...")
         await show_dashboard(update, context)
     elif query.data == 'my_referrals':
-        await query.answer()
         await show_referral_menu(update, context)
     elif query.data == 'top_referrals':
-        await query.answer()
         await show_top_referrals(update, context)
     elif query.data == 'daily_bonus':
         daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
         if daily_bonus_earned:
-            await query.answer("✅ Daily bonus credited!")
             await query.message.edit_text(
                 f"🎉 You have received your daily bonus of {DAILY_BONUS} points (₦{DAILY_BONUS})!",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
             )
         else:
-            await query.answer("❌ You have already claimed your daily bonus today!")
+            await query.message.edit_text(
+                "❌ You have already claimed your daily bonus today!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+            )
     elif query.data == 'balance':
         balance = get_user_balance(user_id)
-        await query.answer()
         await query.message.edit_text(
             f"Your current balance: {balance} points (₦{balance}) 💰",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
