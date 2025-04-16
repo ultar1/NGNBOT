@@ -287,6 +287,12 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
     """Show dashboard with optional back button, including quiz option"""
+    # Get target message
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading dashboard", 1)
+    
     user = update.effective_user
     balance = get_user_balance(user.id)
     ref_count = len(get_referrals(user.id))
@@ -306,8 +312,8 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             InlineKeyboardButton("📝 Tasks", callback_data='tasks')
         ],
         [
-            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),  # Add quiz button
-            InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')  # Add top referrals button
+            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
+            InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')
         ]
     ]
     
@@ -330,19 +336,10 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         "Choose an option below:"
     )
     
-    # Use callback_query.message if update.message is None
-    target_message = update.message or update.callback_query.message
-
     if update.callback_query:
-        await target_message.edit_text(
-            dashboard_text,
-            reply_markup=reply_markup
-        )
+        await target_message.edit_text(dashboard_text, reply_markup=reply_markup)
     else:
-        await target_message.reply_text(
-            dashboard_text,
-            reply_markup=reply_markup
-        )
+        await target_message.reply_text(dashboard_text, reply_markup=reply_markup)
 
 # Update the referral menu to include the user's referral link
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
