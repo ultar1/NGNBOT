@@ -16,6 +16,23 @@ from urllib.parse import urlparse
 import time
 from telegram.error import TelegramError
 
+# Global state tracking variables
+user_quiz_status = {}
+user_verification_state = {}
+referrals = {}
+user_balances = {}
+pending_referrals = {}
+last_signin = {}
+last_withdrawal = {}
+user_withdrawal_state = {}
+user_bank_info = {}
+account_number_to_user = {}
+daily_chat_count = {}
+last_chat_reward = {}
+active_coupons = {}
+used_coupons = {}
+last_weekly_reward = datetime.now()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -28,14 +45,6 @@ ADMIN_ID = 7302005705
 ANNOUNCEMENT_CHANNEL = "@latestinfoult"  # Channel for announcements
 
 # Store user data in memory
-referrals = {}
-user_balances = {}
-pending_referrals = {}  # Store pending referrals until verification
-last_signin = {}  # Track last sign in date for each user
-last_withdrawal = {}  # Track last withdrawal date for each user
-user_withdrawal_state = {}  # Store withdrawal process state
-user_bank_info = {}  # Store user bank details
-account_number_to_user = {}  # Map account numbers to user IDs
 BOT_USERNAME = "sub9ja_bot"  # Updated username
 
 # Channel and Group IDs
@@ -57,10 +66,6 @@ MAX_DAILY_CHAT_REWARD = 50
 TASK_REWARD = 250  # Updated from 100 to 250
 WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
-# Store user data in memory
-last_chat_reward = {}  # Track daily chat rewards
-daily_chat_count = {}  # Track number of chats per day
-
 # Common Nigerian Banks
 BANKS = [
     'Access Bank', 'First Bank', 'GT Bank', 'UBA', 'Zenith Bank',
@@ -70,13 +75,6 @@ BANKS = [
 
 # Track verified status
 user_verified_status = {}
-
-# Store coupon codes
-active_coupons = {}  # Format: {code: {'amount': amount, 'expires_at': datetime}}
-used_coupons = {}    # Format: {code: [user_ids]}
-
-# Store last weekly reward time
-last_weekly_reward = datetime.now()
 
 # Define conversation states
 (
@@ -572,21 +570,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
     # Always show join message for both new and existing users
-    keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    message_text = (
-        "⚠️ You must join our channel and group to use this bot!\n\n"
-        "1. Join our channel\n"
-        "2. Join our group\n"
-        "3. Click 'Check Membership' button"
-    )
-    
-    await update.message.reply_text(message_text, reply_markup=reply_markup)
+    await show_verification_menu(update, context)
     return
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1452,26 +1436,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button clicks"""
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()  # Acknowledge the button click immediately
 
-    # Only check verification for verify_membership and check_membership buttons
-    if query.data == 'verify_membership':
-        await handle_verify_membership(update, context)
-        return
-    elif query.data == 'check_membership':
+    if query.data == 'check_membership':
+        # Check channel and group membership
         is_member = await check_membership(user_id, context)
         if is_member:
             set_user_verified(user_id, True)
+            # After verification, show dashboard
             await show_dashboard(update, context)
         else:
-            await show_join_message(update, context)
+            # Show join message again if not a member
+            await show_verification_menu(update, context)
         return
 
-    # For all other buttons, just check if user is verified
+    # For all other buttons, verify membership first
     if not is_user_verified(user_id):
-        await show_join_message(update, context)
+        await show_verification_menu(update, context)
         return
 
     # Handle other buttons
