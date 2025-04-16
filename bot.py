@@ -571,14 +571,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Check verification status
-    verified = is_user_verified(user.id)
-    if not verified:
-        await show_verification_menu(update, context)
-        return
-
-    # User is verified, show dashboard
-    await show_dashboard(update, context)
+    # Always show verification menu on /start, regardless of verification status
+    await show_verification_menu(update, context)
+    return
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
