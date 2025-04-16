@@ -1314,42 +1314,53 @@ async def process_weekly_rewards(context: ContextTypes.DEFAULT_TYPE):
         last_weekly_reward = current_time
 
 async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get user information including referrals and balance"""
     user = update.effective_user
 
     if not await is_admin(user.id):
-        await update.message.reply_text("❌ This command is only for admins!")
+        # Show user their own info if not admin
+        balance = get_user_balance(user.id)
+        ref_count = len(get_referrals(user.id))
+        info_message = (
+            f"👤 Your Information\n"
+            f"───────────────\n"
+            f"ID: {user.id}\n"
+            f"Balance: ₦{balance}\n"
+            f"Total Referrals: {ref_count}\n"
+            f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
+            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}"
+        )
+        await update.message.reply_text(info_message)
         return
 
-    if not context.args or len(context.args) < 1:
+    # Admin can check other users' info
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /info <user_id>")
         return
 
     try:
         target_user_id = int(context.args[0])
         balance = get_user_balance(target_user_id)
         ref_count = len(get_referrals(target_user_id))
-        total_earnings = ref_count * REFERRAL_BONUS
-        last_signin_date = last_signin.get(target_user_id, None)
-
-        next_bonus = "Available Now! 🎁"
-        if last_signin_date and last_signin_date == datetime.now().date():
-            tomorrow = datetime.now() + timedelta(days=1)
-            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-            time_until = tomorrow - datetime.now()
-            hours = int(time_until.total_seconds() // 3600)
-            minutes = int((time_until.total_seconds() % 3600) // 60)
-            next_bonus = f"in {hours}h {minutes}m ⏳"
+        try:
+            target_user = await context.bot.get_chat(target_user_id)
+            user_name = f"{target_user.first_name} {target_user.last_name if target_user.last_name else ''}"
+            username = f"@{target_user.username}" if target_user.username else "None"
+        except:
+            user_name = "Unknown"
+            username = "None"
 
         info_message = (
             f"👤 User Information\n"
             f"───────────────\n"
             f"ID: {target_user_id}\n"
-            f"Balance: {balance} points (₦{balance})\n"
+            f"Name: {user_name}\n"
+            f"Username: {username}\n"
+            f"Balance: ₦{balance}\n"
             f"Total Referrals: {ref_count}\n"
-            f"Referral Earnings: {total_earnings} points (₦{total_earnings})\n"
-            f"Next Daily Bonus: {next_bonus}\n"
-            f"Min. Withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})"
+            f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
+            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}"
         )
-
         await update.message.reply_text(info_message)
     except ValueError:
         await update.message.reply_text("❌ Invalid user ID!")
@@ -1807,35 +1818,60 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
 
 # Add admin dashboard
 async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the admin dashboard"""
+    """Show comprehensive admin dashboard"""
     user = update.effective_user
-
+    
     if not await is_admin(user.id):
         await update.message.reply_text("❌ This command is only for admins!")
         return
 
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM user_balances")
-            total_users = cur.fetchone()['count']
-            cur.execute("SELECT COUNT(*) FROM referrals")
-            total_referrals = cur.fetchone()['count']
-            cur.execute("SELECT SUM(balance) FROM user_balances")
-            total_balance = cur.fetchone()['sum'] or 0
-            cur.execute("SELECT SUM(amount) FROM (SELECT amount FROM user_activities WHERE activity LIKE 'withdrawal%') AS t")
-            total_withdrawals = cur.fetchone()['sum'] or 0
-            cur.execute("SELECT COUNT(*) FROM user_activities WHERE activity LIKE 'withdrawal_pending%'")
-            pending_withdrawals = cur.fetchone()['count']
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get total users
+                cur.execute("SELECT COUNT(DISTINCT user_id) FROM user_balances")
+                total_users = cur.fetchone()['count']
 
-    message = (
-        f"📊 Admin Dashboard:\n\n"
-        f"• Total Users: {total_users}\n"
-        f"• Total Referrals: {total_referrals}\n"
-        f"• Total Balance Across Users: ₦{total_balance}\n"
-        f"• Total Withdrawals: ₦{total_withdrawals}\n"
-        f"• Pending Withdrawals: {pending_withdrawals}\n"
-    )
-    await update.message.reply_text(message)
+                # Get total referrals
+                cur.execute("SELECT COUNT(*) FROM referrals")
+                total_referrals = cur.fetchone()['count']
+
+                # Get total balance
+                cur.execute("SELECT SUM(balance) FROM user_balances")
+                total_balance = cur.fetchone()['sum'] or 0
+
+                # Get users with pending withdrawals
+                cur.execute("SELECT COUNT(*) FROM user_activities WHERE activity LIKE 'withdrawal_pending%'")
+                pending_withdrawals = cur.fetchone()['count']
+
+                # Get total withdrawn
+                cur.execute("SELECT COUNT(*) FROM user_activities WHERE activity LIKE 'withdrawal_completed%'")
+                completed_withdrawals = cur.fetchone()['count']
+
+                # Get active users today
+                today = datetime.now().date()
+                cur.execute("SELECT COUNT(DISTINCT user_id) FROM user_activities WHERE DATE(timestamp) = %s", (today,))
+                active_today = cur.fetchone()['count']
+
+        dashboard = (
+            "📊 Admin Dashboard\n"
+            "═══════════════\n\n"
+            f"👥 Users\n"
+            f"• Total Users: {total_users}\n"
+            f"• Active Today: {active_today}\n\n"
+            f"💰 Finance\n"
+            f"• Total Balance: ₦{total_balance}\n"
+            f"• Pending Withdrawals: {pending_withdrawals}\n"
+            f"• Completed Withdrawals: {completed_withdrawals}\n\n"
+            f"📈 Referrals\n"
+            f"• Total Referrals: {total_referrals}\n"
+            f"• Avg. Referrals/User: {total_referrals/total_users:.2f}\n\n"
+            f"Use /info <user_id> to check specific user details"
+        )
+
+        await update.message.reply_text(dashboard)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error fetching dashboard data: {str(e)}")
 
 # Define periodic_tasks function
 async def periodic_tasks(context: ContextTypes.DEFAULT_TYPE):
@@ -2065,7 +2101,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
