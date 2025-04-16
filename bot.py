@@ -569,7 +569,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Always show join message for both new and existing users
+    # Always show verification menu first, regardless of verification status
     await show_verification_menu(update, context)
     return
 
