@@ -2481,147 +2481,47 @@ async def handle_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
     
     try:
+        # Delete from all related tables
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Delete from all related tables
+                # Delete from all tables
                 cur.execute("DELETE FROM user_balances WHERE user_id = %s", (user_id,))
                 cur.execute("DELETE FROM referrals WHERE referrer_id = %s OR referred_id = %s", (user_id, user_id))
                 cur.execute("DELETE FROM user_verification WHERE user_id = %s", (user_id,))
                 cur.execute("DELETE FROM user_bank WHERE user_id = %s", (user_id,))
                 cur.execute("DELETE FROM user_withdrawal_time WHERE user_id = %s", (user_id,))
                 cur.execute("DELETE FROM user_activities WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM top_referrals WHERE user_id = %s", (user_id,))
                 conn.commit()
                 
                 if await is_admin(user.id):
                     await update.message.reply_text(f"✅ Successfully deleted user {user_id} from database!")
                 else:
                     await update.message.reply_text("✅ Your account has been deleted. Use /start to create a new account.")
+                    
     except Exception as e:
+        logging.error(f"Error in handle_del_command: {e}")
         await update.message.reply_text(f"❌ Error deleting user: {str(e)}")
 
-async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's earning and withdrawal history"""
-    user_id = update.effective_user.id
+# ...existing code...
+
+def main():
+    # ...existing code...
     
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Get earnings history
-                cur.execute("""
-                    SELECT activity, amount, timestamp 
-                    FROM user_activities 
-                    WHERE user_id = %s AND activity LIKE '%earning%'
-                    ORDER BY timestamp DESC
-                    LIMIT 10
-                """, (user_id,))
-                earnings = cur.fetchall()
-                
-                # Get withdrawal history
-                cur.execute("""
-                    SELECT activity, amount, timestamp 
-                    FROM user_activities 
-                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
-                    ORDER BY timestamp DESC
-                    LIMIT 10
-                """, (user_id,))
-                withdrawals = cur.fetchall()
-        
-        # Format message
-        message = "📊 Your Transaction History\n\n"
-        
-        message += "💰 Recent Earnings:\n"
-        if earnings:
-            for earning in earnings:
-                date = earning['timestamp'].strftime("%Y-%m-%d")
-                message += f"• {date}: +₦{earning['amount']} ({earning['activity']})\n"
-        else:
-            message += "No recent earnings\n"
-        
-        message += "\n💸 Recent Withdrawals:\n"
-        if withdrawals:
-            for withdrawal in withdrawals:
-                date = withdrawal['timestamp'].strftime("%Y-%m-%d")
-                message += f"• {date}: -₦{withdrawal['amount']} ({withdrawal['activity']})\n"
-        else:
-            message += "No recent withdrawals\n"
-            
-        await update.message.reply_text(message)
-    except Exception as e:
-        await update.message.reply_text("❌ Error fetching history. Please try again later.")
-
-def store_top_referrals(user_id, referral_count):
-    """Store top referral data in the database"""
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO top_referrals (user_id, referral_count, timestamp) 
-                    VALUES (%s, %s, NOW())
-                    ON CONFLICT (user_id) 
-                    DO UPDATE SET referral_count = EXCLUDED.referral_count, timestamp = NOW()
-                """, (user_id, referral_count))
-                conn.commit()
-    except Exception as e:
-        logging.error(f"Error storing top referrals: {e}")
-
-async def update_top_referrals():
-    """Update top referrals in the database"""
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Create table if not exists
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS top_referrals (
-                        user_id BIGINT PRIMARY KEY,
-                        referral_count INT,
-                        timestamp TIMESTAMP DEFAULT NOW()
-                    )
-                """)
-                
-                # Get all referrers and their counts
-                for user_id, referred_users in referrals.items():
-                    store_top_referrals(user_id, len(referred_users))
-    except Exception as e:
-        logging.error(f"Error updating top referrals: {e}")
-
-# Update show_top_referrals to use database
-async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show top referrals from database"""
-    target_message = update.message or update.callback_query.message
+    # Register command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("chatid", get_chat_id))
+    application.add_handler(CommandHandler("generate", handle_generate_command))
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))
+    application.add_handler(CommandHandler("task", handle_task_command))
+    application.add_handler(CommandHandler("approve_task", handle_task_approval))
+    application.add_handler(CommandHandler("reject_task", handle_task_rejection))
+    application.add_handler(CommandHandler("reject", handle_reject_command))
+    application.add_handler(CommandHandler("add", handle_add_command))
+    application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    application.add_handler(CommandHandler("history", show_transaction_history))
+    application.add_handler(CommandHandler("db", admin_dashboard))
+    application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
     
-    # Show loading animation
-    await show_loading_animation(target_message, "Loading top referrers", 1)
-    
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT user_id, referral_count 
-                    FROM top_referrals 
-                    ORDER BY referral_count DESC 
-                    LIMIT 5
-                """)
-                top_referrers = cur.fetchall()
-
-        message = "🏆 Top 5 Referrers:\n\n"
-        
-        for i, referrer in enumerate(top_referrers, 1):
-            try:
-                user = await context.bot.get_chat(referrer['user_id'])
-                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
-                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
-            except Exception as e:
-                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
-
-        if not top_referrers:
-            message += "No referrals yet!"
-
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-    except Exception as e:
-        logging.error(f"Error showing top referrals: {e}")
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await target_message.edit_text(
-            "❌ Error loading top referrals. Please try again later.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    # ...existing code...
