@@ -569,22 +569,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Always show verification menu first, regardless of user status
-    keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
-        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
-        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    message_text = (
-        "🔒 Please join our channel and group to use this bot!\n\n"
-        "1. Click the buttons below to join\n"
-        "2. After joining, click 'Check Membership'\n"
-        "3. You'll receive your welcome bonus after verification!"
-    )
-    
-    await update.message.reply_text(message_text, reply_markup=reply_markup)
+    # Always show join message for both new and existing users
+    await show_verification_menu(update, context)
+    return
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
@@ -1454,15 +1441,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     await query.answer()  # Acknowledge the button click immediately
 
+    # Handle verification check first
     if query.data == 'check_membership':
-        # Check channel and group membership
         is_member = await check_membership(user_id, context)
         if is_member:
             set_user_verified(user_id, True)
-            # After verification, show dashboard
             await show_dashboard(update, context)
         else:
-            # Show join message again if not a member
             await show_verification_menu(update, context)
         return
 
@@ -1471,7 +1456,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_verification_menu(update, context)
         return
 
-    # Handle other buttons
+    # Handle other buttons only if verified
     if query.data == 'back_to_menu':
         await show_dashboard(update, context)
     elif query.data == 'my_referrals':
