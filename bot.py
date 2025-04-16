@@ -372,18 +372,39 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Show loading animation
     await show_loading_animation(target_message, "Loading top referrers", 1)
     
-    top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-    message = "🏆 Top 5 Referrers:\n\n"
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT user_id, referral_count 
+                    FROM top_referrals 
+                    ORDER BY referral_count DESC 
+                    LIMIT 5
+                """)
+                top_referrers = cur.fetchall()
 
-    for i, (user_id, referred_users) in enumerate(top_referrers, start=1):
-        message += f"{i}. User ID: {user_id} - Referrals: {len(referred_users)}\n"
+        message = "🏆 Top 5 Referrers:\n\n"
+        
+        for i, referrer in enumerate(top_referrers, 1):
+            try:
+                user = await context.bot.get_chat(referrer['user_id'])
+                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
+                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+            except Exception as e:
+                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
 
-    if not top_referrers:
-        message += "No referrals yet!"
+        if not top_referrers:
+            message += "No referrals yet!"
 
-    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-    
-    await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        logging.error(f"Error showing top referrals: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(
+            "❌ Error loading top referrals. Please try again later.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 # Database connection setup
 DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
@@ -2178,7 +2199,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        ],
+        },
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
@@ -2527,4 +2548,80 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message)
     except Exception as e:
         await update.message.reply_text("❌ Error fetching history. Please try again later.")
-```
+
+def store_top_referrals(user_id, referral_count):
+    """Store top referral data in the database"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO top_referrals (user_id, referral_count, timestamp) 
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET referral_count = EXCLUDED.referral_count, timestamp = NOW()
+                """, (user_id, referral_count))
+                conn.commit()
+    except Exception as e:
+        logging.error(f"Error storing top referrals: {e}")
+
+async def update_top_referrals():
+    """Update top referrals in the database"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Create table if not exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS top_referrals (
+                        user_id BIGINT PRIMARY KEY,
+                        referral_count INT,
+                        timestamp TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                
+                # Get all referrers and their counts
+                for user_id, referred_users in referrals.items():
+                    store_top_referrals(user_id, len(referred_users))
+    except Exception as e:
+        logging.error(f"Error updating top referrals: {e}")
+
+# Update show_top_referrals to use database
+async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top referrals from database"""
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading top referrers", 1)
+    
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT user_id, referral_count 
+                    FROM top_referrals 
+                    ORDER BY referral_count DESC 
+                    LIMIT 5
+                """)
+                top_referrers = cur.fetchall()
+
+        message = "🏆 Top 5 Referrers:\n\n"
+        
+        for i, referrer in enumerate(top_referrers, 1):
+            try:
+                user = await context.bot.get_chat(referrer['user_id'])
+                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
+                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+            except Exception as e:
+                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+
+        if not top_referrers:
+            message += "No referrals yet!"
+
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        logging.error(f"Error showing top referrals: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(
+            "❌ Error loading top referrals. Please try again later.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
