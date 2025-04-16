@@ -1350,7 +1350,19 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(user.id):
         # Show user their own info if not admin
         balance = get_user_balance(user.id)
-        ref_count = len(get_referrals(user.id))
+        referrals_list = get_referrals(user.id)
+        ref_count = len(referrals_list)
+        
+        # Get referral usernames
+        referral_info = []
+        for ref_id in referrals_list:
+            try:
+                ref_user = await context.bot.get_chat(ref_id)
+                username = f"@{ref_user.username}" if ref_user.username else f"User {ref_id}"
+                referral_info.append(username)
+            except Exception as e:
+                referral_info.append(f"User {ref_id}")
+                
         info_message = (
             f"👤 Your Information\n"
             f"───────────────\n"
@@ -1358,8 +1370,16 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Balance: ₦{balance}\n"
             f"Total Referrals: {ref_count}\n"
             f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
-            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}"
+            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
+            f"Your Referrals:\n"
         )
+        
+        if referral_info:
+            for i, username in enumerate(referral_info, 1):
+                info_message += f"{i}. {username}\n"
+        else:
+            info_message += "No referrals yet"
+            
         await update.message.reply_text(info_message)
         return
 
@@ -1371,7 +1391,9 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_user_id = int(context.args[0])
         balance = get_user_balance(target_user_id)
-        ref_count = len(get_referrals(target_user_id))
+        referrals_list = get_referrals(target_user_id)
+        ref_count = len(referrals_list)
+        
         try:
             target_user = await context.bot.get_chat(target_user_id)
             user_name = f"{target_user.first_name} {target_user.last_name if target_user.last_name else ''}"
@@ -1379,6 +1401,16 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             user_name = "Unknown"
             username = "None"
+
+        # Get referral usernames
+        referral_info = []
+        for ref_id in referrals_list:
+            try:
+                ref_user = await context.bot.get_chat(ref_id)
+                ref_username = f"@{ref_user.username}" if ref_user.username else f"User {ref_id}"
+                referral_info.append(ref_username)
+            except:
+                referral_info.append(f"User {ref_id}")
 
         info_message = (
             f"👤 User Information\n"
@@ -1389,8 +1421,16 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Balance: ₦{balance}\n"
             f"Total Referrals: {ref_count}\n"
             f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
-            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}"
+            f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
+            f"User's Referrals:\n"
         )
+        
+        if referral_info:
+            for i, username in enumerate(referral_info, 1):
+                info_message += f"{i}. {username}\n"
+        else:
+            info_message += "No referrals"
+            
         await update.message.reply_text(info_message)
     except ValueError:
         await update.message.reply_text("❌ Invalid user ID!")
@@ -2487,3 +2527,4 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message)
     except Exception as e:
         await update.message.reply_text("❌ Error fetching history. Please try again later.")
+```
