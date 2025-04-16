@@ -528,9 +528,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pending_referrals[user.id] = referrer_id
         except Exception:
             pass
-    # Always show join/verification menu if not verified
+    # Always show verification menu first if not verified
     if not is_user_verified(user.id):
-        await show_join_message(update, context)
+        # Show a menu with a button to verify membership
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+            [InlineKeyboardButton("✅ I've Joined, Verify Me", callback_data='verify_membership')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "🔒 Please join our channel and group to use the bot. After joining, click the button below to verify.",
+            reply_markup=reply_markup
+        )
         return
     # If verified, show main menu
     await show_dashboard(update, context)
@@ -2013,7 +2023,7 @@ def main():
                 CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
                 CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
             ]
-        },
+        ],
         fallbacks=[
             CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
             CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
@@ -2026,7 +2036,7 @@ def main():
         entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
+        ],
         fallbacks=[CommandHandler("start", start)]
     )
 
@@ -2114,4 +2124,3 @@ async def show_verification_menu(update, context):
         "🔒 Please verify your membership by joining our channel and group before using the bot.",
         reply_markup=reply_markup
     )
-```
