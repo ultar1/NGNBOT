@@ -14,6 +14,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from urllib.parse import urlparse
 import time
+from telegram.error import TelegramError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -341,9 +342,14 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     else:
         await target_message.reply_text(dashboard_text, reply_markup=reply_markup)
 
-# Update the referral menu to include the user's referral link
+# Update the referral menu to include loading animation
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading referral stats", 1)
+    
     ref_count = len(get_referrals(user.id))
     referral_link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
 
@@ -353,8 +359,6 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    target_message = update.message or update.callback_query.message
-
     await target_message.edit_text(
         f"You have {ref_count} referrals! 👥\n"
         f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
@@ -363,6 +367,26 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
         reply_markup=reply_markup
     )
+
+# Update top referrals menu with loading animation
+async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading top referrers", 1)
+    
+    top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+    message = "🏆 Top 5 Referrers:\n\n"
+
+    for i, (user_id, referred_users) in enumerate(top_referrers, start=1):
+        message += f"{i}. User ID: {user_id} - Referrals: {len(referred_users)}\n"
+
+    if not top_referrers:
+        message += "No referrals yet!"
+
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+    
+    await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Database connection setup
 DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
@@ -1253,6 +1277,11 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 # Update the top referral menu to edit the existing menu instead of dropping another menu
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading top referrers", 1)
+    
     top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
     message = "🏆 Top 5 Referrers:\n\n"
 
@@ -1263,9 +1292,7 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
         message += "No referrals yet!"
 
     keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-
-    target_message = update.message or update.callback_query.message
-
+    
     await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Add a function to clean expired coupons periodically
@@ -1739,32 +1766,6 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Create buttons for options
     keyboard = [[InlineKeyboardButton(option, callback_data=f'quiz_{option}')] for option in options]
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
-
-    await update.callback_query.message.edit_text(
-        f"🧠 Quiz Time!\n\n{question}\n\nYou have 10 seconds to answer!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    # Start a 10-second timer
-    await asyncio.sleep(10)
-
-    # Check if the quiz is still active
-    if context.user_data.get('quiz_active', False):
-        context.user_data['quiz_active'] = False
-        user_quiz_status[user_id] = today  # Mark as failed for today
-        await update.callback_query.message.edit_text(
-            "⏰ Time's up! You didn't answer in time. Try again tomorrow!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
-        )
-
-async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the user's quiz answer"""
-    query = update.callback_query
-    user_id = query.from_user.id
-    selected_option = query.data.replace('quiz_', '')
-
-    # Check the correct answer
-    correct_answer = context.user_data.get('quiz_answer')
     if not correct_answer:
         await query.answer("❌ Something went wrong. Please try again later.")
         return
@@ -2093,6 +2094,9 @@ def main():
 
     # Initialize bot application
     application = Application.builder().token(token).build()
+    
+    # Register error handler
+    application.add_error_handler(error_handler)
 
     # Define withdrawal handler
     withdrawal_handler = ConversationHandler(
@@ -2249,3 +2253,18 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
             "3. You'll receive your welcome bonus after verification!",
             reply_markup=reply_markup
         )
+
+# Add error handler function
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log the error and send a telegram message to notify the developer."""
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+    
+    # Send error message to admin
+    error_message = f"❌ An error occurred: {context.error}"
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID, 
+            text=error_message
+        )
+    except:
+        pass
