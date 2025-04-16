@@ -1442,24 +1442,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     await query.answer()  # Acknowledge the button click immediately
 
-    # Handle verification button
+    # Only check verification for verify_membership and check_membership buttons
     if query.data == 'verify_membership':
         await handle_verify_membership(update, context)
         return
-
-    if query.data == 'check_membership':
+    elif query.data == 'check_membership':
         is_member = await check_membership(user_id, context)
         if is_member:
             set_user_verified(user_id, True)
-            # After verification, show dashboard
             await show_dashboard(update, context)
         else:
-            await show_verification_menu(update, context)
+            await show_join_message(update, context)
         return
 
-    # Only proceed with other buttons if user is verified
+    # For all other buttons, just check if user is verified
     if not is_user_verified(user_id):
-        await show_verification_menu(update, context)
+        await show_join_message(update, context)
         return
 
     # Handle other buttons
