@@ -571,8 +571,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Always show verification menu on /start, regardless of verification status
-    await show_verification_menu(update, context)
+    # Always show join message for both new and existing users
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Check Membership", callback_data='check_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_text = (
+        "⚠️ You must join our channel and group to use this bot!\n\n"
+        "1. Join our channel\n"
+        "2. Join our group\n"
+        "3. Click 'Check Membership' button"
+    )
+    
+    await update.message.reply_text(message_text, reply_markup=reply_markup)
     return
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2321,3 +2335,4 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Always show verification menu on /start
     await show_verification_menu(update, context)
+    return
