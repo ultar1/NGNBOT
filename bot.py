@@ -519,20 +519,40 @@ def set_withdrawal_time(user_id):
 
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the start command"""
     user = update.effective_user
     args = context.args
+    
+    # Handle referral
     if args:
         try:
             referrer_id = int(args[0])
-            if referrer_id != user.id:
+            if referrer_id != user.id:  # Prevent self-referral
                 pending_referrals[user.id] = referrer_id
-        except Exception:
-            pass
-    # Always show verification menu first if not verified
-    if not is_user_verified(user.id):
-        await show_verification_menu(update, context)
+                logging.info(f"Stored pending referral: {referrer_id} -> {user.id}")
+        except ValueError:
+            logging.warning(f"Invalid referrer ID: {args[0]}")
+
+    # Check verification status
+    verified = is_user_verified(user.id)
+    if not verified:
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+            [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🔒 Please join our channel and group to use this bot!\n\n"
+            "1. Click the buttons below to join\n"
+            "2. After joining, click 'Verify Membership'\n"
+            "3. You'll receive your welcome bonus after verification!",
+            reply_markup=reply_markup
+        )
         return
-    # If verified, show main menu
+
+    # User is verified, show dashboard
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2016,16 +2036,6 @@ def main():
 
     if not token:
         raise ValueError("No BOT_TOKEN found in environment variables")
-
-    print("Starting bot initialization...")
-
-    # Initialize bot application
-    application = Application.builder().token(token).build()
-
-    # Define withdrawal handler
-    withdrawal_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
             CallbackQueryHandler(handle_bank_name, pattern="^bank_")
         ],
         states={
