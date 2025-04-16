@@ -2475,18 +2475,10 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         # Handle both new messages and callback queries
-        if isinstance(update, Update):
-            if update.callback_query:
-                await update.callback_query.message.edit_text(
-                    text=message_text,
-                    reply_markup=reply_markup
-                )
-            else:
-                # For new messages, just send a new message
-                await update.message.reply_text(
-                    text=message_text,
-                    reply_markup=reply_markup
-                )
+        if update.message:
+            await update.message.reply_text(message_text, reply_markup=reply_markup)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
     except Exception as e:
         logging.error(f"Error in show_verification_menu: {e}")
         # Handle error gracefully
