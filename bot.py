@@ -519,59 +519,40 @@ def set_withdrawal_time(user_id):
 
 # Update the start command to include language selection
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /start command with verification check"""
     user = update.effective_user
-
-    # Extract referrer ID from the start parameter
     args = context.args
     if args:
         try:
             referrer_id = int(args[0])
-            if (referrer_id != user.id):  # Prevent self-referral
+            if referrer_id != user.id:
                 pending_referrals[user.id] = referrer_id
-                logging.info(f"Added pending referral: {user.id} referred by {referrer_id}")
-        except ValueError:
-            logging.warning(f"Invalid referrer ID in /start command: {args[0]}")
-
-    # Check if user is verified
-    is_verified = is_user_verified(user.id)
-
-    if not is_verified:
-        await show_verification_menu(update, context)
+        except Exception:
+            pass
+    # Always show join/verification menu if not verified
+    if not is_user_verified(user.id):
+        await show_join_message(update, context)
         return
-
-    # For verified users, show dashboard
+    # If verified, show main menu
     await show_dashboard(update, context)
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle verification button click"""
     query = update.callback_query
     user_id = query.from_user.id
-    
     await query.answer("Checking membership status...")
-    
-    # Check membership
     is_member = await check_membership(user_id, context)
     if not is_member:
         await show_join_message(update, context)
         return
-    
-    # Mark user as verified
     set_user_verified(user_id, True)
-    
-    # Give welcome bonus ONLY IF this is their first verification and they're not in user_balances
+    # Welcome bonus and referral bonus
     if get_user_balance(user_id) == 0:
-        print(f"Adding welcome bonus of {WELCOME_BONUS} to new user {user_id}")
         update_user_balance(user_id, WELCOME_BONUS)
-        add_referral(user_id, set())
-        await query.message.reply_text(
-            f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!"
-        )
-    
-    # Process any pending referrals
-    await process_pending_referral(user_id, context)
-    
-    # Show dashboard
+        referrer_id = pending_referrals.pop(user_id, None)
+        if referrer_id and referrer_id != user_id:
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
+            await context.bot.send_message(referrer_id, f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!")
+        await query.message.reply_text(f"🎉 Welcome! You've received {WELCOME_BONUS} points (₦{WELCOME_BONUS}) as a welcome bonus!")
     await show_dashboard(update, context)
     return
 
