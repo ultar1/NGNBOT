@@ -2117,3 +2117,35 @@ async def show_verification_menu(update, context):
         "🔒 Please verify your membership by joining our channel and group before using the bot.",
         reply_markup=reply_markup
     )
+
+# After the imports and before other code
+# Add all status tracking variables
+user_quiz_status = {}
+user_verification_state = {}  # Track verification state
+
+# After other existing functions
+async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show verification menu with channel and group join buttons"""
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)],
+        [InlineKeyboardButton("✅ Verify Membership", callback_data='verify_membership')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if update.message:
+        await update.message.reply_text(
+            "🔒 Please join our channel and group to use this bot!\n\n"
+            "1. Click the buttons below to join\n"
+            "2. After joining, click 'Verify Membership'\n"
+            "3. You'll receive your welcome bonus after verification!",
+            reply_markup=reply_markup
+        )
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(
+            "🔒 Please join our channel and group to use this bot!\n\n"
+            "1. Click the buttons below to join\n"
+            "2. After joining, click 'Verify Membership'\n"
+            "3. You'll receive your welcome bonus after verification!",
+            reply_markup=reply_markup
+        )
