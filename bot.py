@@ -600,7 +600,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
             
             # Handle welcome bonus for new users
             current_balance = get_user_balance(user_id)
-            if current_balance == 0:
+            if (current_balance == 0):
                 update_user_balance(user_id, WELCOME_BONUS)
                 await query.message.reply_text(
                     f"🎉 Welcome! You've received ₦{WELCOME_BONUS} as a welcome bonus!"
@@ -672,15 +672,22 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     user_id = query.from_user.id
     
-    print(f"Starting withdrawal process for user {user_id}")  # Add debug logging
-    
     # First check user's membership
     is_member = await check_membership(user_id, context)
     if not is_member:
-        print(f"User {user_id} is not a member")  # Add debug logging
         await query.message.edit_text(
             "❌ You must be a member of our channel and group to withdraw!\n"
             "Please join and try again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+        return ConversationHandler.END
+
+    # Check minimum referrals requirement
+    ref_count = len(get_referrals(user_id))
+    if ref_count < 10:
+        await query.message.edit_text(
+            f"❌ You need at least 10 referrals to withdraw.\n"
+            f"You currently have {ref_count} referrals.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
         return ConversationHandler.END
@@ -688,7 +695,6 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
     # Check balance first
     balance = get_user_balance(user_id)
     if balance < MIN_WITHDRAWAL:
-        print(f"User {user_id} has insufficient balance: {balance}")  # Add debug logging
         await query.message.edit_text(
             f"❌ You need at least {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL}) to withdraw.\n"
             f"Your current balance: {balance} points (₦{balance})",
@@ -707,7 +713,6 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
             [InlineKeyboardButton("📝 New Account", callback_data='new_account')],
             [InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]
         ]
-        print(f"User {user_id} has saved bank details")  # Add debug logging
         await query.message.edit_text(
             f"Found saved bank details:\nBank: {saved_info['bank']}\nAccount: {saved_info['account_number']}\n\nWould you like to use this account?",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -715,7 +720,6 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
         return ACCOUNT_NUMBER
     
     # No saved details, proceed with normal flow
-    print(f"User {user_id} needs to enter bank details")  # Add debug logging
     await query.message.edit_text(
         "Please enter your account number (10 digits):",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data='cancel_withdrawal')]])
