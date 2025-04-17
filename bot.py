@@ -299,26 +299,68 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
-    """Show dashboard with optional back button, including quiz option"""
-    # Get target message
+    """Show enhanced dashboard with complete user statistics"""
     target_message = update.message or update.callback_query.message
-    
-    # Show loading animation
     await show_loading_animation(target_message, "Loading dashboard", 1)
     
     user = update.effective_user
-    balance = get_user_balance(user.id)
-    ref_count = len(get_referrals(user.id))
+    user_data = get_total_earnings(user.id)
     daily_chats = daily_chat_count.get(user.id, 0)
     chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
+
+    # Check milestones
+    ref_count = user_data['referral_count']
+    milestones_reached = []
+    next_milestone = None
+    for milestone in sorted([5, 10, 20, 50, 100]):
+        if ref_count >= milestone:
+            milestones_reached.append(milestone)
+        elif next_milestone is None:
+            next_milestone = milestone
+    
+    dashboard_text = (
+        f"📱 {BOT_USERNAME} Dashboard\n"
+        f"━━━━━━━━━━━━━━━━\n\n"
+        f"👤 User Info:\n"
+        f"ID: {user.id}\n"
+        f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
+        f"Username: @{user.username if user.username else 'None'}\n\n"
+        f"💰 Balance & Earnings:\n"
+        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
+        f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
+        f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
+        f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
+        f"👥 Referral Stats:\n"
+        f"• Total Referrals: {ref_count}\n"
+        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n"
+    )
+
+    if next_milestone:
+        dashboard_text += f"• Next Milestone: {next_milestone} referrals\n"
+
+    dashboard_text += (
+        f"\n📊 Today's Activity:\n"
+        f"• Chat Earnings: {daily_chats}/50 (₦{daily_chats})\n"
+        f"• Remaining Chats: {chats_remaining}\n\n"
+        f"💫 Achievements:\n"
+    )
+
+    if milestones_reached:
+        dashboard_text += f"• Milestones: {', '.join(f'{m}✓' for m in milestones_reached)} referrals\n"
+    else:
+        dashboard_text += "• No milestones reached yet\n"
+
+    dashboard_text += (
+        f"\n💡 Quick Tips:\n"
+        f"• Min Withdrawal: ₦{MIN_WITHDRAWAL:,}\n"
+        f"• Daily Quiz: ₦50 reward\n"
+        f"• Task Reward: ₦{TASK_REWARD}"
+    )
     
     keyboard = [
         [
             InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
-            InlineKeyboardButton("💰 Balance", callback_data='balance')
-        ],
-        [
-            InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')
+            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw')
         ],
         [
             InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
@@ -326,162 +368,120 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         ],
         [
             InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
-            InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')
+            InlineKeyboardButton("🏆 Leaderboard", callback_data='top_referrals')
+        ],
+        [
+            InlineKeyboardButton("📊 History", callback_data='show_history'),
+            InlineKeyboardButton("ℹ️ Help", callback_data='help')
         ]
     ]
     
-    # Add back button if requested
     if show_back:
         keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    dashboard_text = (
-        f"🎯 Quick Stats:\n"
-        f"• Balance: {balance} points (₦{balance})\n"
-        f"• Total Referrals: {ref_count}\n"
-        f"• Earnings per referral: {REFERRAL_BONUS} points (₦{REFERRAL_BONUS})\n"
-        f"• Daily bonus: {DAILY_BONUS} points (₦{DAILY_BONUS})\n"
-        f"• Chat earnings: ₦1 per chat\n"
-        f"• Today's chats: {daily_chats}/50 (₦{daily_chats})\n"
-        f"• Remaining chat earnings: {chats_remaining} (₦{chats_remaining})\n"
-        f"• Min. withdrawal: {MIN_WITHDRAWAL} points (₦{MIN_WITHDRAWAL})\n\n"
-        "Choose an option below:"
-    )
     
     if update.callback_query:
         await target_message.edit_text(dashboard_text, reply_markup=reply_markup)
     else:
         await target_message.reply_text(dashboard_text, reply_markup=reply_markup)
 
-# Update the referral menu to include loading animation
-async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    target_message = update.message or update.callback_query.message
+async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle verification button click"""
+    query = update.callback_query
+    user_id = query.from_user.id
     
-    # Show loading animation
-    await show_loading_animation(target_message, "Loading referral stats", 1)
+    await query.answer("🔍 Checking membership status...")
     
-    ref_count = len(get_referrals(user.id))
-    referral_link = f"https://t.me/{BOT_USERNAME}?start={user.id}"
-
-    keyboard = [
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await target_message.edit_text(
-        f"You have {ref_count} referrals! 👥\n"
-        f"Total earnings: {ref_count * REFERRAL_BONUS} points (₦{ref_count * REFERRAL_BONUS})\n\n"
-        f"Your Telegram Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
-        f"🔗 Your Referral Link:\n{referral_link}\n\n"
-        f"Share this link with your friends to earn ₦{REFERRAL_BONUS} for each referral!",
-        reply_markup=reply_markup
-    )
-
-# Update top referrals menu with loading animation
-async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    target_message = update.message or update.callback_query.message
-
-    # Show loading animation
-    await show_loading_animation(target_message, "Loading top referrers", 1)
-
     try:
-        # Database query to fetch top referrers
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT user_id, referral_count 
-                    FROM users 
-                    WHERE referral_count > 0
-                    ORDER BY referral_count DESC 
-                    LIMIT 5
-                """)
-                top_referrers = cur.fetchall()
+        await query.message.edit_text(
+            "⏳ Verifying your membership...\n"
+            "Please wait a moment."
+        )
+        
+        # Membership check
+        is_member = await check_membership(user_id, context)
+        if not is_member:
+            # Verification failed
+            keyboard = [
+                [
+                    InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
+                    InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
+                ],
+                [InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]
+            ]
+            await query.message.edit_text(
+                "❌ Verification Failed!\n\n"
+                "Please make sure to:\n"
+                "1. Join our channel\n"
+                "2. Join our group\n"
+                "3. Stay in both\n\n"
+                "Then click 'Try Again'",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
 
-        # Prepare the message text
-        if top_referrers:
-            message = "🏆 Top 5 Referrers:\n\n"
-            for i, referrer in enumerate(top_referrers, 1):
+        # Check if user is already verified to avoid duplicate welcome bonus
+        is_verified = is_user_verified(user_id)
+        
+        if not is_verified:
+            # Give welcome bonus to new users
+            update_user_balance(user_id, WELCOME_BONUS)
+            set_user_verified(user_id, True)  # Mark user as verified
+            
+            await query.message.edit_text(
+                "✅ Verification Successful!\n\n"
+                f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
+                "Loading your dashboard..."
+            )
+            
+            # Process referral if exists
+            referrer_id = pending_referrals.get(user_id)
+            if referrer_id and referrer_id != user_id:  # Prevent self-referral
+                # Add referral and credit bonus
+                add_referral(referrer_id, user_id)
+                update_user_balance(referrer_id, REFERRAL_BONUS)
+                
+                # Check and process milestone rewards
+                ref_count = len(get_referrals(referrer_id))
+                milestone_reward = process_milestone_reward(referrer_id, ref_count)
+                
+                # Notify referrer with combined message
+                notification = (
+                    f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!"
+                )
+                if milestone_reward > 0:
+                    notification += f"\n🎯 Bonus: ₦{milestone_reward} for reaching {ref_count} referrals milestone!"
+                notification += f"\nNew balance: ₦{get_user_balance(referrer_id)}"
+                
                 try:
-                    # Fetch user data from Telegram
-                    user = await context.bot.get_chat(referrer['user_id'])
-                    username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
-                    message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=notification
+                    )
                 except Exception as e:
-                    logging.error(f"Error fetching user data for ID {referrer['user_id']}: {e}")
-                    message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+                    logging.error(f"Failed to notify referrer: {e}")
+                
+                # Remove from pending referrals
+                pending_referrals.pop(user_id, None)
+            
+            # Notify admin about new user
+            await notify_admin_new_user(user_id, {}, referrer_id if referrer_id else None, context)
         else:
-            message = "No referrals yet!"
+            await query.message.edit_text(
+                "✅ Verification Successful!\n"
+                "Loading your dashboard..."
+            )
 
-        # Add a back-to-menu button
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        # Show dashboard after verification
+        await show_dashboard(update, context)
 
     except Exception as e:
-        logging.error(f"Error showing top referrals: {e}")
-        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-        await target_message.edit_text(
-            "❌ Error loading top referrals. Please try again later.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        logging.error(f"Error in verification: {e}")
+        await query.message.edit_text(
+            "❌ An error occurred during verification. Please try again later.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
         )
-
-# Database connection setup
-DATABASE_URL = "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo"
-def get_db_connection():
-    db_url = os.getenv("DATABASE_URL", "postgres://u3krleih91oqbi:pcd8f6341baeb90af4a8c9cd122e720c6372449c90ba90d5df39a39e0b954c562@c9pv5s2sq0i76o.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d5ac9cb5iuidbo")
-    result = urlparse(db_url)
-
-    return psycopg2.connect(
-        dbname=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port,
-        cursor_factory=RealDictCursor
-    )
-
-# Ensure database tables exist
-
-def initialize_database():
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS user_balances (
-                    user_id BIGINT PRIMARY KEY,
-                    balance INT DEFAULT 0
-                );
-
-                CREATE TABLE IF NOT EXISTS referrals (
-                    referrer_id BIGINT,
-                    referred_id BIGINT,
-                    PRIMARY KEY (referrer_id, referred_id)
-                );
-                CREATE TABLE IF NOT EXISTS user_verification (
-                    user_id BIGINT PRIMARY KEY,
-                    verified BOOLEAN DEFAULT FALSE
-                );
-                CREATE TABLE IF NOT EXISTS user_activities (
-                    user_id BIGINT,
-                    activity TEXT,
-                    timestamp TIMESTAMP DEFAULT NOW()
-                );
-                CREATE TABLE IF NOT EXISTS user_bank (
-                    user_id BIGINT PRIMARY KEY,
-                    account_number VARCHAR(20),
-                    bank VARCHAR(50),
-                    account_name VARCHAR(100)
-                );
-                CREATE TABLE IF NOT EXISTS user_withdrawal_time (
-                    user_id BIGINT PRIMARY KEY,
-                    last_withdrawal TIMESTAMP
-                );
-            """)
-            conn.commit()
-
-initialize_database()
-
 # User balance operations
 
 def get_user_balance(user_id):
@@ -637,7 +637,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
                     InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
                 ],
-                [InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]
+                [InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]
             ]
             await query.message.edit_text(
                 "❌ Verification Failed!\n\n"
@@ -650,55 +650,65 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
             )
             return
 
-        # Check if user is already verified to avoid duplicate welcome bonus
-        is_verified = is_user_verified(user_id)
+        # New user verification logic
+        user_data = get_user_data(user_id)
+        is_new_user = not user_data['is_verified']
         
-        if not is_verified:
-            # Give welcome bonus to new users
-            update_user_balance(user_id, WELCOME_BONUS)
-            set_user_verified(user_id, True)  # Mark user as verified
+        if is_new_user:
+            # Update user status as verified
+            user_data['is_verified'] = True
             
+            # Credit welcome bonus
+            update_user_balance(user_id, WELCOME_BONUS)
             await query.message.edit_text(
                 "✅ Verification Successful!\n\n"
                 f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
                 "Loading your dashboard..."
             )
             
-            # Process referral if exists
-            referrer_id = pending_referrals.get(user_id)
-            if referrer_id and referrer_id != user_id:  # Prevent self-referral
-                # Credit referral bonus
-                update_user_balance(referrer_id, REFERRAL_BONUS)
-                add_referral(referrer_id, user_id)
-                
-                # Notify referrer
-                try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
-                    )
-                except Exception as e:
-                    logging.error(f"Failed to notify referrer: {e}")
-                
-                # Remove from pending referrals
-                pending_referrals.pop(user_id, None)
+            # Notify admin about the new user
+            admin_message = (
+                f"🆕 New User Verified!\n\n"
+                f"User Information:\n"
+                f"• ID: {user_id}\n"
+                f"• Username: @{query.from_user.username or 'None'}\n"
+                f"• Name: {query.from_user.first_name} {query.from_user.last_name or ''}\n\n"
+                f"🎁 Welcome bonus of ₦{WELCOME_BONUS} credited!"
+            )
+            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+
+        # Handle referrals
+        referrer_id = pending_referrals.pop(user_id, None)
+        if referrer_id:
+            add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)
+
+            # Notify referrer about the referral bonus
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
+            )
             
-            # Notify admin about new user
-            await notify_admin_new_user(user_id, {}, referrer_id if referrer_id else None, context)
-        else:
-            await query.message.edit_text(
-                "✅ Verification Successful!\n"
-                "Loading your dashboard..."
+            # Notify admin about the referral
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"👥 Referral Processed\n\n"
+                    f"Referrer:\n"
+                    f"• ID: {referrer_id}\n"
+                    f"• New Referral: {query.from_user.first_name} (ID: {user_id})\n"
+                    f"🎁 Referral bonus of ₦{REFERRAL_BONUS} credited to referrer!"
+                )
             )
 
-        # Show dashboard after verification
+        # Load the user dashboard
         await show_dashboard(update, context)
 
     except Exception as e:
         logging.error(f"Error in verification: {e}")
         await query.message.edit_text(
             "❌ An error occurred during verification. Please try again later.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]])
         )
 
 async def can_withdraw_today(user_id: int) -> bool:
@@ -2074,6 +2084,7 @@ def get_db_connection():
         user=result.username,
         password=result.password,
         host=result.hostname,
+        port=result.port,
         cursor_factory=RealDictCursor
     )
 
@@ -2691,3 +2702,75 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "❌ Error loading top referrals. Please try again later.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+async def get_user_id_from_input(context: ContextTypes.DEFAULT_TYPE, input_str: str) -> int:
+    """Helper function to get user ID from either username or ID"""
+    try:
+        # First try parsing as user ID
+        return int(input_str)
+    except ValueError:
+        try:
+            # If not a number, try as username
+            if input_str.startswith('@'):
+                username = input_str[1:]
+            else:
+                username = input_str
+            
+            # Try to get user from chat
+            chat = await context.bot.get_chat(f"@{username}")
+            return chat.id
+        except Exception as e:
+            return None
+
+def process_milestone_reward(user_id: int, ref_count: int) -> int:
+    """Process milestone rewards and return bonus amount"""
+    milestone_rewards = {
+        5: 500,    # ₦500 for 5 referrals
+        10: 1000,  # ₦1000 for 10 referrals
+        20: 2000,  # ₦2000 for 20 referrals
+        50: 5000,  # ₦5000 for 50 referrals
+        100: 10000 # ₦10000 for 100 referrals
+    }
+    
+    reward = 0
+    for milestone, amount in milestone_rewards.items():
+        if ref_count == milestone:
+            reward = amount
+            break
+            
+    if reward > 0:
+        update_user_balance(user_id, reward)
+        log_user_activity(user_id, f"milestone_reward_{ref_count}")
+        
+    return reward
+
+def get_total_earnings(user_id: int) -> dict:
+    """Get breakdown of user's total earnings"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Get task earnings
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) as task_total
+                FROM user_activities 
+                WHERE user_id = %s AND activity LIKE '%task%'
+            """, (user_id,))
+            task_earnings = cur.fetchone()['task_total']
+            
+            # Get referral count
+            cur.execute("SELECT COUNT(*) as ref_count FROM referrals WHERE referrer_id = %s", (user_id,))
+            ref_count = cur.fetchone()['ref_count']
+            
+            # Calculate referral earnings
+            referral_earnings = ref_count * REFERRAL_BONUS
+            
+            # Get total balance
+            cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+            current_balance = cur.fetchone()['balance'] if cur.fetchone() else 0
+            
+            return {
+                'task_earnings': task_earnings,
+                'referral_earnings': referral_earnings,
+                'referral_count': ref_count,
+                'current_balance': current_balance,
+                'total_earnings': task_earnings + referral_earnings
+            }
