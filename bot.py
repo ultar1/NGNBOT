@@ -1579,6 +1579,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_task_2_menu(update, context)
     elif query.data == 'help':
         await show_help(update, context)
+    elif query.data == 'show_history':
+        await show_transaction_history(update, context)
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
@@ -1929,19 +1931,54 @@ def log_transaction(user_id: int, transaction_type: str, amount: int):
     })
 
 async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the user's transaction history"""
+    """Show the user's earning and withdrawal history"""
     user_id = update.effective_user.id
-    history = transaction_history.get(user_id, [])
 
-    if not history:
-        await update.message.reply_text("📜 You have no transaction history.")
-        return
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Fetch earnings history
+                cur.execute("""
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%earning%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                """, (user_id,))
+                earnings = cur.fetchall()
 
-    message = "📜 Transaction History:\n\n"
-    for entry in history:
-        message += f"• {entry['date']}: {entry['type'].capitalize()} ₦{entry['amount']}\n"
+                # Fetch withdrawal history
+                cur.execute("""
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                """, (user_id,))
+                withdrawals = cur.fetchall()
 
-    await update.message.reply_text(message)
+        message = "📜 Your Transaction History\n\n"
+
+        message += "💰 Recent Earnings:\n"
+        if earnings:
+            for earning in earnings:
+                date = earning['timestamp'].strftime("%Y-%m-%d")
+                message += f"• {date}: +₦{earning['amount']} ({earning['activity']})\n"
+        else:
+            message += "No recent earnings\n"
+
+        message += "\n💸 Recent Withdrawals:\n"
+        if withdrawals:
+            for withdrawal in withdrawals:
+                date = withdrawal['timestamp'].strftime("%Y-%m-%d")
+                message += f"• {date}: -₦{withdrawal['amount']} ({withdrawal['activity']})\n"
+        else:
+            message += "No recent withdrawals\n"
+
+        await update.message.reply_text(message)
+    except Exception as e:
+        logging.error(f"Error fetching transaction history: {e}")
+        await update.message.reply_text("❌ Error fetching history. Please try again later.")
 
 # Add admin dashboard
 async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
