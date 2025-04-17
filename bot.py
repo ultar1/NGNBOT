@@ -368,36 +368,42 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Update top referrals menu with loading animation
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_message = update.message or update.callback_query.message
-    
+
     # Show loading animation
     await show_loading_animation(target_message, "Loading top referrers", 1)
-    
+
     try:
+        # Database query to fetch top referrers
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT user_id, referral_count 
-                    FROM top_referrals 
+                    FROM users 
+                    WHERE referral_count > 0
                     ORDER BY referral_count DESC 
                     LIMIT 5
                 """)
                 top_referrers = cur.fetchall()
 
-        message = "🏆 Top 5 Referrers:\n\n"
-        
-        for i, referrer in enumerate(top_referrers, 1):
-            try:
-                user = await context.bot.get_chat(referrer['user_id'])
-                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
-                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
-            except Exception as e:
-                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+        # Prepare the message text
+        if top_referrers:
+            message = "🏆 Top 5 Referrers:\n\n"
+            for i, referrer in enumerate(top_referrers, 1):
+                try:
+                    # Fetch user data from Telegram
+                    user = await context.bot.get_chat(referrer['user_id'])
+                    username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
+                    message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+                except Exception as e:
+                    logging.error(f"Error fetching user data for ID {referrer['user_id']}: {e}")
+                    message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+        else:
+            message = "No referrals yet!"
 
-        if not top_referrers:
-            message += "No referrals yet!"
-
+        # Add a back-to-menu button
         keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
         await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
     except Exception as e:
         logging.error(f"Error showing top referrals: {e}")
         keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
