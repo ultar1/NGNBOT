@@ -299,92 +299,42 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
-    """Show enhanced dashboard with complete user statistics"""
-    target_message = update.message or update.callback_query.message
-    await show_loading_animation(target_message, "Loading dashboard", 1)
-    
+    """Show the main dashboard with enhanced and correct user bot details"""
     user = update.effective_user
-    user_data = get_total_earnings(user.id)
-    daily_chats = daily_chat_count.get(user.id, 0)
-    chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
+    user_id = user.id
 
-    # Check milestones
-    ref_count = user_data['referral_count']
-    milestones_reached = []
-    next_milestone = None
-    for milestone in sorted([5, 10, 20, 50, 100]):
-        if ref_count >= milestone:
-            milestones_reached.append(milestone)
-        elif next_milestone is None:
-            next_milestone = milestone
-    
-    dashboard_text = (
-        f"📱 {BOT_USERNAME} Dashboard\n"
-        f"━━━━━━━━━━━━━━━━\n\n"
-        f"👤 User Info:\n"
-        f"ID: {user.id}\n"
-        f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
-        f"Username: @{user.username if user.username else 'None'}\n\n"
-        f"💰 Balance & Earnings:\n"
-        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
-        f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
-        f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
-        f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
-        f"👥 Referral Stats:\n"
-        f"• Total Referrals: {ref_count}\n"
-        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n"
+    # Fetch user details
+    balance = get_user_balance(user_id)
+    referral_count = len(get_referrals(user_id))
+
+    # Construct the dashboard message
+    dashboard_message = (
+        f"👤 Welcome, {user.first_name} {user.last_name if user.last_name else ''}\n"
+        f"───────────────\n"
+        f"💰 Balance: ₦{balance}\n"
+        f"👥 Referrals: {referral_count}\n"
+        f"📅 Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
+        f"What would you like to do?"
     )
 
-    if next_milestone:
-        dashboard_text += f"• Next Milestone: {next_milestone} referrals\n"
-
-    dashboard_text += (
-        f"\n📊 Today's Activity:\n"
-        f"• Chat Earnings: {daily_chats}/50 (₦{daily_chats})\n"
-        f"• Remaining Chats: {chats_remaining}\n\n"
-        f"💫 Achievements:\n"
-    )
-
-    if milestones_reached:
-        dashboard_text += f"• Milestones: {', '.join(f'{m}✓' for m in milestones_reached)} referrals\n"
-    else:
-        dashboard_text += "• No milestones reached yet\n"
-
-    dashboard_text += (
-        f"\n💡 Quick Tips:\n"
-        f"• Min Withdrawal: ₦{MIN_WITHDRAWAL:,}\n"
-        f"• Daily Quiz: ₦50 reward\n"
-        f"• Task Reward: ₦{TASK_REWARD}"
-    )
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
-            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw')
-        ],
-        [
-            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
-            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
-        ],
-        [
-            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
-            InlineKeyboardButton("🏆 Leaderboard", callback_data='top_referrals')
-        ],
-        [
-            InlineKeyboardButton("📊 History", callback_data='show_history'),
-            InlineKeyboardButton("ℹ️ Help", callback_data='help')
-        ]
+    # Define the dashboard buttons
+    buttons = [
+        [InlineKeyboardButton("💰 Check Balance", callback_data='balance')],
+        [InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
+        [InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus')],
+        [InlineKeyboardButton("📋 Tasks", callback_data='tasks')],
+        [InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
-    
+
     if show_back:
-        keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if update.callback_query:
-        await target_message.edit_text(dashboard_text, reply_markup=reply_markup)
-    else:
-        await target_message.reply_text(dashboard_text, reply_markup=reply_markup)
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')])
+
+    # Send the dashboard message
+    await update.message.reply_text(
+        dashboard_message,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
