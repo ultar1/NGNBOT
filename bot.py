@@ -299,22 +299,16 @@ async def show_join_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fix the issue where update.message is None in button-related functions
 async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, show_back=False):
-    """
-    Show enhanced dashboard with complete user statistics
-    """
-    # Get the target message for updating the dashboard text
+    """Show enhanced dashboard with complete user statistics"""
     target_message = update.message or update.callback_query.message
-
-    # Display a loading animation while preparing the dashboard
     await show_loading_animation(target_message, "Loading dashboard", 1)
-
-    # Fetch user and earnings data
+    
     user = update.effective_user
-    user_data = get_total_earnings(user.id)  # Function to calculate total earnings
-    daily_chats = daily_chat_count.get(user.id, 0)  # Daily chat count logic
+    user_data = get_total_earnings(user.id)
+    daily_chats = daily_chat_count.get(user.id, 0)
     chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
 
-    # Check and calculate milestones
+    # Check milestones
     ref_count = user_data['referral_count']
     milestones_reached = []
     next_milestone = None
@@ -323,8 +317,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             milestones_reached.append(milestone)
         elif next_milestone is None:
             next_milestone = milestone
-
-    # Prepare the dashboard text
+    
     dashboard_text = (
         f"📱 {BOT_USERNAME} Dashboard\n"
         f"━━━━━━━━━━━━━━━━\n\n"
@@ -333,7 +326,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
         f"Username: @{user.username if user.username else 'None'}\n\n"
         f"💰 Balance & Earnings:\n"
-        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
+        f"• Current Balance: ₦{user_data['current_balance']:,}\n""
         f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
         f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
         f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
@@ -342,11 +335,9 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n"
     )
 
-    # Add milestones to the dashboard text
     if next_milestone:
         dashboard_text += f"• Next Milestone: {next_milestone} referrals\n"
 
-    # Add today's activity and achievements
     dashboard_text += (
         f"\n📊 Today's Activity:\n"
         f"• Chat Earnings: {daily_chats}/50 (₦{daily_chats})\n"
@@ -359,40 +350,37 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     else:
         dashboard_text += "• No milestones reached yet\n"
 
-    # Add quick tips to the dashboard text
     dashboard_text += (
         f"\n💡 Quick Tips:\n"
         f"• Min Withdrawal: ₦{MIN_WITHDRAWAL:,}\n"
         f"• Daily Quiz: ₦50 reward\n"
-        f"• Task Reward: ₦{TASK_REWARD}\n"
+        f"• Task Reward: ₦{TASK_REWARD}"
     )
-
-    # Prepare the keyboard for dashboard navigation (3 buttons per line)
+    
     keyboard = [
         [
             InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
-            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw'),
-            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus')
+            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw')
         ],
         [
-            InlineKeyboardButton("📝 Tasks", callback_data='tasks'),
+            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
+            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
+        ],
+        [
             InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
             InlineKeyboardButton("🏆 Leaderboard", callback_data='top_referrals')
         ],
         [
             InlineKeyboardButton("📊 History", callback_data='show_history'),
-            InlineKeyboardButton("ℹ️ Help", callback_data='help'),
-            InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')
+            InlineKeyboardButton("ℹ️ Help", callback_data='help')
         ]
     ]
-
-    # Remove "Back to Menu" if show_back is False
-    if not show_back:
-        keyboard[-1].remove(InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu'))
-
+    
+    if show_back:
+        keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # Send or update the dashboard message
+    
     if update.callback_query:
         await target_message.edit_text(dashboard_text, reply_markup=reply_markup)
     else:
