@@ -637,7 +637,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
                     InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
                 ],
-                [InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]
+                [InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]
             ]
             await query.message.edit_text(
                 "❌ Verification Failed!\n\n"
@@ -650,65 +650,55 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
             )
             return
 
-        # New user verification logic
-        user_data = get_user_data(user_id)
-        is_new_user = not user_data['is_verified']
+        # Check if user is already verified to avoid duplicate welcome bonus
+        is_verified = is_user_verified(user_id)
         
-        if is_new_user:
-            # Update user status as verified
-            user_data['is_verified'] = True
-            
-            # Credit welcome bonus
+        if not is_verified:
+            # Give welcome bonus to new users
             update_user_balance(user_id, WELCOME_BONUS)
+            set_user_verified(user_id, True)  # Mark user as verified
+            
             await query.message.edit_text(
                 "✅ Verification Successful!\n\n"
                 f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
                 "Loading your dashboard..."
             )
             
-            # Notify admin about the new user
-            admin_message = (
-                f"🆕 New User Verified!\n\n"
-                f"User Information:\n"
-                f"• ID: {user_id}\n"
-                f"• Username: @{query.from_user.username or 'None'}\n"
-                f"• Name: {query.from_user.first_name} {query.from_user.last_name or ''}\n\n"
-                f"🎁 Welcome bonus of ₦{WELCOME_BONUS} credited!"
-            )
-            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
-
-        # Handle referrals
-        referrer_id = pending_referrals.pop(user_id, None)
-        if referrer_id:
-            add_referral(referrer_id, user_id)
-            update_user_balance(referrer_id, REFERRAL_BONUS)
-
-            # Notify referrer about the referral bonus
-            await context.bot.send_message(
-                chat_id=referrer_id,
-                text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
-            )
+            # Process referral if exists
+            referrer_id = pending_referrals.get(user_id)
+            if referrer_id and referrer_id != user_id:  # Prevent self-referral
+                # Credit referral bonus
+                update_user_balance(referrer_id, REFERRAL_BONUS)
+                add_referral(referrer_id, user_id)
+                
+                # Notify referrer
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!\nNew balance: ₦{get_user_balance(referrer_id)}"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to notify referrer: {e}")
+                
+                # Remove from pending referrals
+                pending_referrals.pop(user_id, None)
             
-            # Notify admin about the referral
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=(
-                    f"👥 Referral Processed\n\n"
-                    f"Referrer:\n"
-                    f"• ID: {referrer_id}\n"
-                    f"• New Referral: {query.from_user.first_name} (ID: {user_id})\n"
-                    f"🎁 Referral bonus of ₦{REFERRAL_BONUS} credited to referrer!"
-                )
+            # Notify admin about new user
+            await notify_admin_new_user(user_id, {}, referrer_id if referrer_id else None, context)
+        else:
+            await query.message.edit_text(
+                "✅ Verification Successful!\n"
+                "Loading your dashboard..."
             )
 
-        # Load the user dashboard
+        # Show dashboard after verification
         await show_dashboard(update, context)
 
     except Exception as e:
         logging.error(f"Error in verification: {e}")
         await query.message.edit_text(
             "❌ An error occurred during verification. Please try again later.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='verify_membership')]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
         )
 
 async def can_withdraw_today(user_id: int) -> bool:
@@ -2084,7 +2074,6 @@ def get_db_connection():
         user=result.username,
         password=result.password,
         host=result.hostname,
-        port=result.port,
         cursor_factory=RealDictCursor
     )
 
