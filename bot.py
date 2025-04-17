@@ -1572,13 +1572,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
   if not is_user_verified(user_id):
-        await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
             await show_verification_menu(update,await sho# Handle verification check first
     if query.data == 'check_membership':
         is_member = await check_membership(user_id, context)
@@ -1588,19 +1581,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
  context)
         return
-
-w_verification_menu(update, context)
-   show_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
- context)
-        return
-
-w return
 
     # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
     if query.data == 'check_membership':
