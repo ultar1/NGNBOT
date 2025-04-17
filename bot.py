@@ -319,7 +319,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             next_milestone = milestone
     
     dashboard_text = (
-        f"📱 PAY9JA Dashboard\n"
+        f"📱 {BOT_USERNAME} Dashboard\n"
         f"━━━━━━━━━━━━━━━━\n\n"
         f"👤 User Info:\n"
         f"ID: {user.id}\n"
@@ -1561,65 +1561,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # For all other buttons, verify membership first
-  # Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
-            await show_verification_menu(update, context)
+    if not is_user_verified(user_id):
+        await show_verification_menu(update, context)
         return
 
-  if not is_user_verified(user_id):
-            await show_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
- context)
-        return
-
-    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
- context)
-ons only if verified
-    w return
-
-    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(update, context)
-        else:
- context)
-ons_to_menu':
-        awaw return
-
-    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-            await show_dashboard(updaawaw return
-
-    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
-    if query.data == 'check_membership':
-        is_member = await check_membership(user_id, context)
-        if is_member:
-            set_user_verified(user_id, True)
-te, context)
-        else:
- context)
-onste, context)
+    # Handle other buttons only if verified
+    if query.data == 'back_to_menu':
+        await show_dashboard(update, context)
     elif query.data == 'my_referrals':
         await show_referral_menu(update, context)
     elif query.data == 'top_referrals':
