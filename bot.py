@@ -1799,8 +1799,12 @@ quiz_data = [
 # ...existing code...
 
 # Update quiz retry logic to use a 10-second timer
+import asyncio
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ContextTypes
+
 async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show quiz menu with a random question"""
+    """Show quiz menu with a random question and a 10-second timer."""
     user_id = update.effective_user.id
     today = datetime.now().date()
 
@@ -1818,7 +1822,7 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     options = quiz["options"]
     correct_answer = quiz["answer"]
 
-    # Save the correct answer in context
+    # Save the correct answer and quiz status in context
     context.user_data['quiz_answer'] = correct_answer
     context.user_data['quiz_active'] = True
 
@@ -1827,10 +1831,26 @@ async def show_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
 
     # Show the question
-    await update.callback_query.message.edit_text(
+    question_message = await update.callback_query.message.edit_text(
         f"📝 Quiz Question:\n\n{question}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+    # Start 10-second timer
+    try:
+        await asyncio.sleep(10)
+
+        # Check if the quiz is still active (i.e., no answer was provided)
+        if context.user_data.get('quiz_active', False):
+            context.user_data['quiz_active'] = False  # Mark quiz as inactive
+            await context.bot.edit_message_text(
+                chat_id=question_message.chat_id,
+                message_id=question_message.message_id,
+                text=f"⏰ Time's up! The correct answer was: {correct_answer}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+            )
+    except Exception as e:
+        print(f"Error during quiz timer: {e}")
 
 # Update referral milestones to start from 50
 MILESTONES = [50, 100, 200]  # Define referral milestones
