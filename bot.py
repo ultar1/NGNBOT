@@ -2327,139 +2327,6 @@ async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_T
         # Handle error gracefully
         if update.callback_query:
             await update.callback_query.answer("An error occurred. Please try /start again.")
-
-def main():
-    # Get environment variables with fallbacks
-    token = os.getenv("BOT_TOKEN")
-    port = int(os.getenv("PORT", "8443"))
-    app_name = "sub9ja-5e9153f8bf96.herokuapp.com"  # Your Heroku app name
-
-    if not token:
-        raise ValueError("No BOT_TOKEN found in environment variables")
-
-    print("Starting bot initialization...")
-
-    # Initialize bot application
-    application = Application.builder().token(token).build()
-
-    # Register handlers first
-    # Register quiz handlers - moved before using them
-    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern="^quiz_.*"))
-    application.add_handler(CallbackQueryHandler(show_quiz_menu, pattern="^quiz$"))
-
-    # Register error handler
-    application.add_error_handler(error_handler)
-
-    # Define withdrawal handler
-    withdrawal_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
-            CallbackQueryHandler(handle_bank_name, pattern="^bank_")
-        ],
-        states={
-            ACCOUNT_NUMBER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
-            ],
-            BANK_NAME: [
-                CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
-                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
-            ],
-            ACCOUNT_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
-                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
-            ],
-            AMOUNT_SELECTION: [
-                CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
-                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
-            ]
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
-            CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
-            CommandHandler("start", start)
-        ]
-    )
-
-    # Define payment handler for admin payment confirmation
-    payment_handler = ConversationHandler(
-        entry_points=[CommandHandler("paid", handle_paid_command)],
-        states={
-            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
-        fallbacks=[CommandHandler("start", start)]
-    )
-
-    print("Registering handlers...")
-
-    # Register conversation handlers
-    application.add_handler(withdrawal_handler)
-    application.add_handler(payment_handler)
-
-    # Register command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("info", get_user_info))
-    application.add_handler(CommandHandler("chatid", get_chat_id))
-    application.add_handler(CommandHandler("generate", handle_generate_command))
-    application.add_handler(CommandHandler("redeem", handle_redeem_command))
-    application.add_handler(CommandHandler("task", handle_task_command))
-    application.add_handler(CommandHandler("approve_task", handle_task_approval))
-    application.add_handler(CommandHandler("reject_task", handle_task_rejection))
-    application.add_handler(CommandHandler("reject", handle_reject_command))
-    application.add_handler(CommandHandler("add", handle_add_command))
-    application.add_handler(CommandHandler("deduct", handle_deduct_command))
-    application.add_handler(CommandHandler("history", show_transaction_history))
-    application.add_handler(CommandHandler("db", admin_dashboard))
-    application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
-
-    # Register message and button handlers
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Register the logging handler
-    application.add_handler(MessageHandler(filters.ALL, log_all_updates))
-
-    print("Setting up webhook...")
-
-    try:
-        # Set up webhook with correct domain and path
-        webhook_url = f"https://{app_name}/{token}"
-
-        # Start the webhook
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=token,
-            webhook_url=webhook_url,
-            allowed_updates=Update.ALL_TYPES
-        )
-        print(f"Webhook set up successfully at {webhook_url}")
-    except Exception as e:
-        print(f"Error setting up webhook: {e}")
-        return
-
-    # Schedule periodic tasks
-    application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
-
-    # Update referral membership deduction to deduct ₦100 instead of ₦1000
-    async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
-        """Deduct balance if a referral leaves the channel or group"""
-        for referrer_id, referred_users in referrals.items():
-            for referred_id in list(referred_users):
-                is_member = await check_membership(referred_id, context)
-                if not is_member:
-                    # Deduct 100 NGN from referrer
-                    update_user_balance(referrer_id, -100)
-
-                    # Deduct 100 NGN from the user who left
-                    update_user_balance(referred_id, -100)
-
-                    # Remove the referral
-                    referred_users.remove(referred_id)
-                    print(f"Removed referral {referred_id} for referrer {referrer_id}")
-
-if __name__ == '__main__':
-    main()
-
 # Add back user_quiz_status for quiz tracking
 user_quiz_status = {}
 
@@ -2821,3 +2688,135 @@ def get_total_earnings(user_id: int) -> dict:
                 'current_balance': current_balance,
                 'total_earnings': task_earnings + referral_earnings
             }
+
+def main():
+    # Get environment variables with fallbacks
+    token = os.getenv("BOT_TOKEN")
+    port = int(os.getenv("PORT", "8443"))
+    app_name = "sub9ja-5e9153f8bf96.herokuapp.com"  # Your Heroku app name
+
+    if not token:
+        raise ValueError("No BOT_TOKEN found in environment variables")
+
+    print("Starting bot initialization...")
+
+    # Initialize bot application
+    application = Application.builder().token(token).build()
+
+    # Register handlers first
+    # Register quiz handlers - moved before using them
+    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern="^quiz_.*"))
+    application.add_handler(CallbackQueryHandler(show_quiz_menu, pattern="^quiz$"))
+
+    # Register error handler
+    application.add_error_handler(error_handler)
+
+    # Define withdrawal handler
+    withdrawal_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(handle_withdrawal_start, pattern="^withdraw$"),
+            CallbackQueryHandler(handle_bank_name, pattern="^bank_")
+        ],
+        states={
+            ACCOUNT_NUMBER: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_number)
+            ],
+            BANK_NAME: [
+                CallbackQueryHandler(handle_bank_name, pattern="^bank_"),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ],
+            ACCOUNT_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_account_name),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ],
+            AMOUNT_SELECTION: [
+                CallbackQueryHandler(handle_amount_selection, pattern="^amount_"),
+                CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$")
+            ]
+        },
+        fallbacks=[
+            CallbackQueryHandler(cancel_withdrawal, pattern="^cancel_withdrawal$"),
+            CallbackQueryHandler(button_handler, pattern="^back_to_menu$"),
+            CommandHandler("start", start)
+        ]
+    )
+
+    # Define payment handler for admin payment confirmation
+    payment_handler = ConversationHandler(
+        entry_points=[CommandHandler("paid", handle_paid_command)],
+        states={
+            PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
+        },
+        fallbacks=[CommandHandler("start", start)]
+    )
+
+    print("Registering handlers...")
+
+    # Register conversation handlers
+    application.add_handler(withdrawal_handler)
+    application.add_handler(payment_handler)
+
+    # Register command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("chatid", get_chat_id))
+    application.add_handler(CommandHandler("generate", handle_generate_command))
+    application.add_handler(CommandHandler("redeem", handle_redeem_command))
+    application.add_handler(CommandHandler("task", handle_task_command))
+    application.add_handler(CommandHandler("approve_task", handle_task_approval))
+    application.add_handler(CommandHandler("reject_task", handle_task_rejection))
+    application.add_handler(CommandHandler("reject", handle_reject_command))
+    application.add_handler(CommandHandler("add", handle_add_command))
+    application.add_handler(CommandHandler("deduct", handle_deduct_command))
+    application.add_handler(CommandHandler("history", show_transaction_history))
+    application.add_handler(CommandHandler("db", admin_dashboard))
+    application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
+
+    # Register message and button handlers
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Register the logging handler
+    application.add_handler(MessageHandler(filters.ALL, log_all_updates))
+
+    print("Setting up webhook...")
+
+    try:
+        # Set up webhook with correct domain and path
+        webhook_url = f"https://{app_name}/{token}"
+
+        # Start the webhook
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=token,
+            webhook_url=webhook_url,
+            allowed_updates=Update.ALL_TYPES
+        )
+        print(f"Webhook set up successfully at {webhook_url}")
+    except Exception as e:
+        print(f"Error setting up webhook: {e}")
+        return
+
+    # Schedule periodic tasks
+    application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
+
+    # Update referral membership deduction to deduct ₦100 instead of ₦1000
+    async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
+        """Deduct balance if a referral leaves the channel or group"""
+        for referrer_id, referred_users in referrals.items():
+            for referred_id in list(referred_users):
+                is_member = await check_membership(referred_id, context)
+                if not is_member:
+                    # Deduct 100 NGN from referrer
+                    update_user_balance(referrer_id, -100)
+
+                    # Deduct 100 NGN from the user who left
+                    update_user_balance(referred_id, -100)
+
+                    # Remove the referral
+                    referred_users.remove(referred_id)
+                    print(f"Removed referral {referred_id} for referrer {referrer_id}")
+
+if __name__ == '__main__':
+    main()
