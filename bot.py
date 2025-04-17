@@ -2792,11 +2792,50 @@ async def handle_task_submit_button(update: Update, context: ContextTypes.DEFAUL
     """Handle task submission button"""
     try:
         user_id = update.effective_user.id
-        # Ensure user balance is updated correctly
-        balance = get_user_balance(user_id)
-        await update.message.reply_text(f"Your current balance is ₦{balance}.")
+        # Check if the user is verified
+        if not is_user_verified(user_id):
+            await update.message.reply_text("❌ You need to verify your membership before submitting tasks.")
+            return
+
+        # Check if the command is replying to a message with a photo
+        reply_to_message = update.message.reply_to_message
+        photo = None
+
+        if reply_to_message and reply_to_message.photo:
+            photo = reply_to_message.photo[-1]
+        elif update.message.photo:
+            photo = update.message.photo[-1]
+
+        if not photo:
+            await update.message.reply_text(
+                "❌ Please either:\n"
+                "1. Attach a screenshot with the /task command, or\n"
+                "2. Reply to a screenshot with the /task command"
+            )
+            return
+
+        # Notify admin about the submission
+        admin_message = (
+            f"📝 New Task Submission!\n\n"
+            f"From User:\n"
+            f"• ID: {user_id}\n"
+            f"• Username: @{update.effective_user.username if update.effective_user.username else 'None'}\n"
+            f"• Name: {update.effective_user.first_name} {update.effective_user.last_name if update.effective_user.last_name else ''}"
+        )
+
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=photo.file_id,
+            caption=admin_message + f"\n\nUse /approve_task {user_id} to approve\nUse /reject_task {user_id} to reject"
+        )
+
+        await update.message.reply_text(
+            "✅ Your task screenshot has been submitted for review!\n"
+            "You will receive your reward once approved."
+        )
     except Exception as e:
         logging.error(f"Error handling task submit button: {e}")
+        await update.message.reply_text("❌ Error submitting task. Please try again later.")
 
 def main():
     # Get environment variables with fallbacks
@@ -2855,7 +2894,7 @@ def main():
         entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        },
+        ],
         fallbacks=[CommandHandler("start", start)]
     )
 
