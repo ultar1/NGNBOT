@@ -2702,6 +2702,63 @@ def get_total_earnings(user_id: int) -> dict:
             'total_earnings': 0
         }
 
+async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's referral information including usernames"""
+    user_id = update.effective_user.id
+    target_message = update.message or update.callback_query.message
+    
+    # Show loading animation
+    await show_loading_animation(target_message, "Loading referral info", 1)
+    
+    try:
+        referrals_list = get_referrals(user_id)
+        ref_count = len(referrals_list)
+        
+        # Get total earnings from referrals
+        referral_earnings = ref_count * REFERRAL_BONUS
+        
+        # Generate referral link
+        bot = await context.bot.get_me()
+        referral_link = f"https://t.me/{bot.username}?start={user_id}"
+        
+        message = (
+            f"👥 Your Referral Dashboard\n"
+            f"═══════════════════\n\n"
+            f"Total Referrals: {ref_count}\n"
+            f"Earnings per Referral: ₦{REFERRAL_BONUS}\n"
+            f"Total Earnings: ₦{referral_earnings}\n\n"
+            f"Your Referral Link:\n{referral_link}\n\n"
+            f"Your Referrals:\n"
+        )
+        
+        if referrals_list:
+            for i, ref_id in enumerate(referrals_list, 1):
+                try:
+                    ref_user = await context.bot.get_chat(ref_id)
+                    username = f"@{ref_user.username}" if ref_user.username else ref_user.first_name
+                    message += f"{i}. {username}\n"
+                except Exception as e:
+                    message += f"{i}. User {ref_id}\n"
+        else:
+            message += "No referrals yet. Share your link to earn!"
+            
+        keyboard = [
+            [InlineKeyboardButton("📢 Share Link", switch_inline_query=f"Join {bot.first_name} using my referral link!")],
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+        ]
+        
+        await target_message.edit_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logging.error(f"Error in show_referral_menu: {e}")
+        await target_message.edit_text(
+            "❌ Error loading referral information. Please try again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
