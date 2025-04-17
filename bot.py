@@ -2627,41 +2627,49 @@ async def get_user_id_from_input(context: ContextTypes.DEFAULT_TYPE, input_str: 
 
 # Add this command handler for the /info command
 async def command_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the /info command to fetch user information by ID or username"""
     try:
-        # Get the target user ID
-        target_user = update.effective_user.id
+        # Get the target user ID or username from arguments
         if context.args:
-            # If a username/ID was provided as argument
-            target_user = await get_user_id_from_input(context, context.args[0])
-            if target_user is None:
-                await update.message.reply_text(
-                    "❌ Could not find the specified user. Please check the username/ID and try again."
-                )
-                return
-        
-        # Get user data
-        user_data = get_user_data(target_user)
-        if not user_data:
-            await update.message.reply_text("❌ User data not found.")
-            return
-            
+            input_str = context.args[0]
+            if input_str.startswith('@'):
+                # If input is a username, fetch user ID
+                try:
+                    user = await context.bot.get_chat(input_str)
+                    target_user_id = user.id
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Could not find user with username {input_str}. Error: {e}")
+                    return
+            else:
+                # If input is a user ID, parse it
+                try:
+                    target_user_id = int(input_str)
+                except ValueError:
+                    await update.message.reply_text("❌ Invalid user ID format. Please provide a valid ID or username.")
+                    return
+        else:
+            # Default to the command issuer's ID if no argument is provided
+            target_user_id = update.effective_user.id
+
+        # Fetch user data
+        balance = get_user_balance(target_user_id)
+        referrals = get_referrals(target_user_id)
+        referral_count = len(referrals)
+        is_verified = is_user_verified(target_user_id)
+
         # Format user information
         info_message = (
-            "👤 User Information\n"
-            f"User ID: {target_user}\n"
-            f"Balance: ₦{user_data['balance']}\n"
-            f"Total Referrals: {len(user_data['referrals'])}\n"
-            f"Verified: {'✅' if user_data['is_verified'] else '❌'}\n"
-            f"Last Sign-in: {user_data['last_signin'].strftime('%Y-%m-%d %H:%M:%S') if user_data['last_signin'] else 'Never'}\n"
-            f"Last Withdrawal: {user_data['last_withdrawal'].strftime('%Y-%m-%d %H:%M:%S') if user_data['last_withdrawal'] else 'Never'}"
+            f"👤 User Information\n"
+            f"User ID: {target_user_id}\n"
+            f"Balance: ₦{balance}\n"
+            f"Total Referrals: {referral_count}\n"
+            f"Verified: {'✅' if is_verified else '❌'}\n"
         )
-        
+
         await update.message.reply_text(info_message)
     except Exception as e:
-        print(f"Error in command_info: {str(e)}")
-        await update.message.reply_text(
-            "❌ An error occurred while fetching user information. Please try again later."
-        )
+        logging.error(f"Error in command_info: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching user information. Please try again later.")
 
 def process_milestone_reward(user_id: int, ref_count: int) -> int:
     """Process milestone rewards and return bonus amount"""
@@ -2881,7 +2889,7 @@ def main():
 
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("info", get_user_info))
+    application.add_handler(CommandHandler("info", command_info))
     application.add_handler(CommandHandler("chatid", get_chat_id))
     application.add_handler(CommandHandler("generate", handle_generate_command))
     application.add_handler(CommandHandler("redeem", handle_redeem_command))
