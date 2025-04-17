@@ -64,7 +64,7 @@ MAX_WITHDRAWAL = 1000
 LEAVE_PENALTY = 200
 CHAT_REWARD = 1
 MAX_DAILY_CHAT_REWARD = 50
-TASK_REWARD = 100  # Changed from 250 to 100
+TASK_REWARD = 250  # Updated from 100 to 250
 WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
 # Common Nigerian Banks
@@ -319,7 +319,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
             next_milestone = milestone
     
     dashboard_text = (
-        f"📱 {BOT_USERNAME} Dashboard\n"
+        f"📱 PAY9JA Dashboard\n"
         f"━━━━━━━━━━━━━━━━\n\n"
         f"👤 User Info:\n"
         f"ID: {user.id}\n"
@@ -1550,20 +1550,100 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     await query.answer()  # Acknowledge the button click immediately
 
-    # For all other buttons, verify membership first
-    if not is_user_verified(user_id):
-        await show_verification_menu(update, context)
+    # Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+            await show_verification_menu(update, context)
         return
 
-    # Handle other buttons only if verified
-    if query.data == 'back_to_menu':
-        await show_dashboard(update, context)
+    # For all other buttons, verify membership first
+  # Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+            await show_verification_menu(update, context)
+        return
+
+  if not is_user_verified(user_id):
+        await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+            await show_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+ context)
+        return
+
+w_verification_menu(update, context)
+   show_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+ context)
+        return
+
+w return
+
+    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+ context)
+ons only if verified
+    w return
+
+    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(update, context)
+        else:
+ context)
+ons_to_menu':
+        awaw return
+
+    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+            await show_dashboard(updaawaw return
+
+    # Handle other buttshow_verification_menu(update,await sho# Handle verification check first
+    if query.data == 'check_membership':
+        is_member = await check_membership(user_id, context)
+        if is_member:
+            set_user_verified(user_id, True)
+te, context)
+        else:
+ context)
+onste, context)
     elif query.data == 'my_referrals':
         await show_referral_menu(update, context)
     elif query.data == 'top_referrals':
         await show_top_referrals(update, context)
-    elif query.data == 'help':
-        await show_help(update, context)  # Added help handling
     elif query.data == 'daily_bonus':
         daily_bonus_earned = await check_and_credit_daily_bonus(user_id)
         if daily_bonus_earned:
@@ -1576,12 +1656,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ You have already claimed your daily bonus today!",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
             )
+    elif query.data == 'balance':
+        balance = get_user_balance(user_id)
+        await query.message.edit_text(
+            f"Your current balance: {balance} points (₦{balance}) 💰",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
     elif query.data == 'tasks':
         await handle_tasks_button(update, context)
     elif query.data == 'quiz':
         await show_quiz_menu(update, context)
     elif query.data.startswith('quiz_'):
         await handle_quiz_answer(update, context)
+    elif query.data == 'task_1':
+        await handle_task_1_menu(update, context)
+    elif query.data == 'task_2':
+        await handle_task_2_menu(update, context)
+    elif query.data == 'help':
+        await show_help(update, context)
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
@@ -2755,7 +2847,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💰 Earning Methods:\n"
         "• Daily Quiz: ₦50\n"
         "• Referrals: ₦80/referral\n"
-        "• Tasks: ₦100/task\n"
+        "• Tasks: ₦250/task\n"
         "• Daily Bonus: ₦25\n"
         "• Group Chat: ₦1/message (max 50/day)\n\n"
         "💳 Withdrawal Info:\n"
