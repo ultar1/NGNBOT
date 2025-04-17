@@ -2076,8 +2076,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = get_user_balance(user.id)
 
     # Show dashboard
-    await show_dashboard(update, context)
-
+    await show_verification_menu(update, context)
+    return
 # Ensure database tables exist
 def initialize_database():
     with get_db_connection() as conn:
