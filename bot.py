@@ -15,8 +15,6 @@ from psycopg2.extras import RealDictCursor
 from urllib.parse import urlparse
 import time
 from telegram.error import TelegramError
-from SQLAlchemy.orm import Session
-from init_db import Session, User, Transaction
 
 
 # Global state tracking variables
