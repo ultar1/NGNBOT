@@ -1783,32 +1783,30 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
     try:
         user = await context.bot.get_chat(user_id)
         referrer = await context.bot.get_chat(referrer_id) if referrer_id else None
-        
+
         admin_message = (
             "🆕 New User Verified!\n\n"
-            f"👤 New User:\n"
+            f"👤 User Information:\n"
             f"• ID: {user_id}\n"
             f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
-            f"• Username: @{user.username if user.username else 'None'}\n\n"
+            f"• Username: @{user.username if user.username else 'None'}\n"
+            f"• Welcome Bonus: ₦{WELCOME_BONUS}\n\n"
         )
-        
+
         if referrer:
             admin_message += (
                 f"👥 Referred By:\n"
                 f"• ID: {referrer_id}\n"
                 f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
                 f"• Username: @{referrer.username if referrer.username else 'None'}\n"
-                f"• Total Referrals: {len(get_referrals(referrer_id))}"
+                f"• Referral Bonus: ₦{REFERRAL_BONUS}"
             )
         else:
             admin_message += "Direct Join (No Referrer)"
-        
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_message
-        )
+
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
     except Exception as e:
-        print(f"Failed to send admin notification: {e}")
+        logging.error(f"Failed to notify admin about new user {user_id}: {e}")
 
 # Expand quiz data to 50 harder and clearer questions
 quiz_data = [
