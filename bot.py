@@ -1596,6 +1596,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_quiz_menu(update, context)
     elif query.data.startswith('quiz_'):
         await handle_quiz_answer(update, context)
+    elif query.data == 'task_1':
+        await handle_task_1_menu(update, context)
+    elif query.data == 'task_2':
+        await handle_task_2_menu(update, context)
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
@@ -1711,21 +1715,64 @@ async def handle_task_rejection(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tasks button click"""
+    """Handle tasks button click and show task selection menu"""
     keyboard = [
+        [InlineKeyboardButton("📱 Task 1: Referral Sharing", callback_data='task_1')],
+        [InlineKeyboardButton("👥 Task 2: Join Group", callback_data='task_2')],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
     
     await update.callback_query.message.edit_text(
-        "📝 Task Instructions:\n\n"
+        "📋 Available Tasks\n"
+        "══════════════\n\n"
+        "Choose a task to complete:\n\n"
+        "1️⃣ Share your referral link\n"
+        "2️⃣ Join our community group\n\n"
+        "Select a task to view instructions!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_task_1_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show Task 1 instructions"""
+    keyboard = [
+        [InlineKeyboardButton("📤 Submit Screenshot", callback_data='submit_task_1')],
+        [InlineKeyboardButton("🔙 Back to Tasks", callback_data='tasks')],
+        [InlineKeyboardButton("🏠 Main Menu", callback_data='back_to_menu')]
+    ]
+    
+    await update.callback_query.message.edit_text(
+        "📱 Task 1: Share Referral Link\n"
+        "═══════════════════════\n\n"
+        "Instructions:\n"
         "1. Join our channel and group\n"
         "2. Share your referral link on any social media\n"
         "3. Take a screenshot showing:\n"
         "   • Your post with the referral link, OR\n"
         "   • Your content/review about our bot\n"
         "4. Send the screenshot using /task command\n\n"
-        f"Reward: ₦{TASK_REWARD} per approved task\n\n"
-        "Note: Your task will be reviewed and approved by admin",
+        f"Reward: ₦{TASK_REWARD}\n\n"
+        "Note: Your submission will be reviewed by admin",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_task_2_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show Task 2 instructions"""
+    keyboard = [
+        [InlineKeyboardButton("👥 Join Group", url="https://t.me/+qm80EPssXow4NTU1")],
+        [InlineKeyboardButton("📤 Submit Screenshot", callback_data='submit_task_2')],
+        [InlineKeyboardButton("🔙 Back to Tasks", callback_data='tasks')],
+        [InlineKeyboardButton("🏠 Main Menu", callback_data='back_to_menu')]
+    ]
+    
+    await update.callback_query.message.edit_text(
+        "👥 Task 2: Join Our Community\n"
+        "═══════════════════════\n\n"
+        "Instructions:\n"
+        "1. Join our community group using the button below\n"
+        "2. Take a screenshot showing that you've joined\n"
+        "3. Send the screenshot using /task command\n\n"
+        f"Reward: ₦{TASK_REWARD}\n\n"
+        "Note: Your submission will be reviewed by admin",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
