@@ -2657,31 +2657,70 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def get_user_id_from_input(context: ContextTypes.DEFAULT_TYPE, input_str: str) -> int:
     """Helper function to get user ID from either username or ID"""
+    if not input_str:
+        return None
+        
     try:
         # First try parsing as user ID
         return int(input_str)
     except ValueError:
         try:
             # If not a number, try as username
-            if input_str.startswith('@'):
-                username = input_str[1:]
-            else:
-                username = input_str
+            username = input_str.lstrip('@')
             
             # Try to get user from chat
             chat = await context.bot.get_chat(f"@{username}")
             return chat.id
         except Exception as e:
+            print(f"Error getting user ID for input '{input_str}': {str(e)}")
             return None
+
+# Add this command handler for the /info command
+async def command_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # Get the target user ID
+        target_user = update.effective_user.id
+        if context.args:
+            # If a username/ID was provided as argument
+            target_user = await get_user_id_from_input(context, context.args[0])
+            if target_user is None:
+                await update.message.reply_text(
+                    "❌ Could not find the specified user. Please check the username/ID and try again."
+                )
+                return
+        
+        # Get user data
+        user_data = get_user_data(target_user)
+        if not user_data:
+            await update.message.reply_text("❌ User data not found.")
+            return
+            
+        # Format user information
+        info_message = (
+            "👤 User Information\n"
+            f"User ID: {target_user}\n"
+            f"Balance: ₦{user_data['balance']}\n"
+            f"Total Referrals: {len(user_data['referrals'])}\n"
+            f"Verified: {'✅' if user_data['is_verified'] else '❌'}\n"
+            f"Last Sign-in: {user_data['last_signin'].strftime('%Y-%m-%d %H:%M:%S') if user_data['last_signin'] else 'Never'}\n"
+            f"Last Withdrawal: {user_data['last_withdrawal'].strftime('%Y-%m-%d %H:%M:%S') if user_data['last_withdrawal'] else 'Never'}"
+        )
+        
+        await update.message.reply_text(info_message)
+    except Exception as e:
+        print(f"Error in command_info: {str(e)}")
+        await update.message.reply_text(
+            "❌ An error occurred while fetching user information. Please try again later."
+        )
 
 def process_milestone_reward(user_id: int, ref_count: int) -> int:
     """Process milestone rewards and return bonus amount"""
     milestone_rewards = {
-        5: 500,    # ₦500 for 5 referrals
-        10: 1000,  # ₦1000 for 10 referrals
-        20: 2000,  # ₦2000 for 20 referrals
-        50: 5000,  # ₦5000 for 50 referrals
-        100: 10000 # ₦10000 for 100 referrals
+        10: 500,    # ₦500 for 5 referrals
+        20: 1000,  # ₦1000 for 10 referrals
+        30: 1500,  # ₦1500 for 20 referrals
+        50: 4500,  # ₦5000 for 50 referrals
+        100:5000 # ₦10000 for 100 referrals
     }
     
     reward = 0
