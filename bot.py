@@ -485,21 +485,28 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
 # User balance operations
 
 def get_user_balance(user_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
-            result = cur.fetchone()
-            return result['balance'] if result else 0
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+                result = cur.fetchone()
+                return result['balance'] if result else 0
+    except Exception as e:
+        print(f"Error fetching balance for user {user_id}: {e}")
+        return 0
 
 def update_user_balance(user_id, amount):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO user_balances (user_id, balance) VALUES (%s, %s) "
-                "ON CONFLICT (user_id) DO UPDATE SET balance = user_balances.balance + %s",
-                (user_id, amount, amount)
-            )
-            conn.commit()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO user_balances (user_id, balance) VALUES (%s, %s) "
+                    "ON CONFLICT (user_id) DO UPDATE SET balance = user_balances.balance + %s",
+                    (user_id, amount, amount)
+                )
+                conn.commit()
+    except Exception as e:
+        print(f"Error updating balance for user {user_id}: {e}")
 
 # Referral operations
 
