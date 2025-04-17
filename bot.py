@@ -1323,25 +1323,46 @@ async def handle_redeem_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         print(f"Failed to send admin notification: {e}")
 
-# Update the top referral menu to edit the existing menu instead of dropping another menu
 async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top referrals from database"""
     target_message = update.message or update.callback_query.message
-    
+
     # Show loading animation
     await show_loading_animation(target_message, "Loading top referrers", 1)
-    
-    top_referrers = sorted(referrals.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-    message = "🏆 Top 5 Referrers:\n\n"
 
-    for i, (user_id, referred_users) in enumerate(top_referrers, start=1):
-        message += f"{i}. User ID: {user_id} - Referrals: {len(referred_users)}\n"
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT user_id, referral_count 
+                    FROM top_referrals 
+                    ORDER BY referral_count DESC 
+                    LIMIT 5
+                """)
+                top_referrers = cur.fetchall()
 
-    if not top_referrers:
-        message += "No referrals yet!"
+        message = "🏆 Top 5 Referrers:\n\n"
 
-    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
-    
-    await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        for i, referrer in enumerate(top_referrers, 1):
+            try:
+                user = await context.bot.get_chat(referrer['user_id'])
+                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
+                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+            except Exception as e:
+                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+
+        if not top_referrers:
+            message += "No referrals yet!"
+
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        logging.error(f"Error showing top referrals: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+        await target_message.edit_text(
+            "❌ Error loading top referrals. Please try again later.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 # Add a function to clean expired coupons periodically
 async def clean_expired_coupons():
@@ -2932,7 +2953,7 @@ def main():
         return
 
     # Schedule periodic tasks
-    application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily
+    application.job_queue.run_repeating(periodic_tasks, interval=86400, first=0)  # Run daily❌ An error occurred while fetching user information❌ An error occurred while fetching user information
 
     # Update referral membership deduction to deduct ₦100 instead of ₦1000
     async def handle_referral_membership_changes(context: ContextTypes.DEFAULT_TYPE):
