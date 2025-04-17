@@ -2663,45 +2663,34 @@ def process_milestone_reward(user_id: int, ref_count: int) -> int:
 def get_total_earnings(user_id: int) -> dict:
     """Get breakdown of user's total earnings"""
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Get task earnings
-                cur.execute("""
-                    SELECT COALESCE(SUM(amount), 0) as task_total
-                    FROM user_activities 
-                    WHERE user_id = %s AND activity LIKE '%task%'
-                """, (user_id,))
-                result = cur.fetchone()
-                task_earnings = result['task_total'] if result else 0
-                
-                # Get referral count
-                cur.execute("SELECT COUNT(*) as ref_count FROM referrals WHERE referrer_id = %s", (user_id,))
-                result = cur.fetchone()
-                ref_count = result['ref_count'] if result else 0
-                
-                # Calculate referral earnings
-                referral_earnings = ref_count * REFERRAL_BONUS
-                
-                # Get total balance
-                cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
-                result = cur.fetchone()
-                current_balance = result['balance'] if result else 0
-                
-                return {
-                    'task_earnings': task_earnings,
-                    'referral_earnings': referral_earnings,
-                    'referral_count': ref_count,
-                    'current_balance': current_balance,
-                    'total_earnings': task_earnings + referral_earnings
-                }
-    except Exception as e:
-        logging.error(f"Error getting total earnings: {str(e)}")
+        # Fetch referrals and calculate referral earnings
+        referrals_list = get_referrals(user_id)
+        referral_earnings = len(referrals_list) * REFERRAL_BONUS
+
+        # Fetch task earnings (assuming a function exists to fetch task earnings)
+        task_earnings = get_user_task_earnings(user_id)
+
+        # Fetch current balance
+        current_balance = get_user_balance(user_id)
+
+        # Calculate total earnings
+        total_earnings = referral_earnings + task_earnings
+
         return {
-            'task_earnings': 0,
-            'referral_earnings': 0,
+            'referral_count': len(referrals_list),
+            'referral_earnings': referral_earnings,
+            'task_earnings': task_earnings,
+            'total_earnings': total_earnings,
+            'current_balance': current_balance
+        }
+    except Exception as e:
+        logging.error(f"Error calculating total earnings for user {user_id}: {e}")
+        return {
             'referral_count': 0,
-            'current_balance': 0,
-            'total_earnings': 0
+            'referral_earnings': 0,
+            'task_earnings': 0,
+            'total_earnings': 0,
+            'current_balance': 0
         }
 
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
