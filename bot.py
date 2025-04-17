@@ -304,28 +304,19 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     await show_loading_animation(target_message, "Loading dashboard", 1)
     
     user = update.effective_user
-    # Get user data from database
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            # Get user balance and earnings
-            cur.execute("""
-                SELECT balance, total_earnings, referral_earnings, task_earnings
-                FROM user_balances
-                WHERE user_id = %s
-            """, (user.id,))
-            user_data = cur.fetchone() or {
-                'balance': 0,
-                'total_earnings': 0,
-                'referral_earnings': 0,
-                'task_earnings': 0
-            }
-            
-            # Get referral count
-            cur.execute("SELECT COUNT(*) as ref_count FROM referrals WHERE referrer_id = %s", (user.id,))
-            ref_count = cur.fetchone()['ref_count']
-
+    user_data = get_total_earnings(user.id)
     daily_chats = daily_chat_count.get(user.id, 0)
     chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
+
+    # Check milestones
+    ref_count = user_data['referral_count']
+    milestones_reached = []
+    next_milestone = None
+    for milestone in sorted([5, 10, 20, 50, 100]):
+        if ref_count >= milestone:
+            milestones_reached.append(milestone)
+        elif next_milestone is None:
+            next_milestone = milestone
     
     dashboard_text = (
         f"📱 {BOT_USERNAME} Dashboard\n"
@@ -335,53 +326,56 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
         f"Username: @{user.username if user.username else 'None'}\n\n"
         f"💰 Balance & Earnings:\n"
-        f"• Current Balance: ₦{user_data['balance']:,}\n"
+        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
         f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
         f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
         f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
         f"👥 Referral Stats:\n"
         f"• Total Referrals: {ref_count}\n"
-        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n\n"
-        f"📊 Today's Activity:\n"
+        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n"
+    )
+
+    if next_milestone:
+        dashboard_text += f"• Next Milestone: {next_milestone} referrals\n"
+
+    dashboard_text += (
+        f"\n📊 Today's Activity:\n"
         f"• Chat Earnings: {daily_chats}/50 (₦{daily_chats})\n"
         f"• Remaining Chats: {chats_remaining}\n\n"
-        f"💡 Quick Tips:\n"
+        f"💫 Achievements:\n"
+    )
+
+    if milestones_reached:
+        dashboard_text += f"• Milestones: {', '.join(f'{m}✓' for m in milestones_reached)} referrals\n"
+    else:
+        dashboard_text += "• No milestones reached yet\n"
+
+    dashboard_text += (
+        f"\n💡 Quick Tips:\n"
         f"• Min Withdrawal: ₦{MIN_WITHDRAWAL:,}\n"
         f"• Daily Quiz: ₦50 reward\n"
-        f"• Task Reward: ₦{TASK_REWARD}\n"
-        f"• Use /task to submit tasks"
+        f"• Task Reward: ₦{TASK_REWARD}"
     )
     
-    # Organize buttons in rows of 3
-    buttons = [
-        "👥 Referrals", "💰 Withdraw", "📅 Daily Bonus",
-        "📝 Tasks", "🧠 Quiz", "🏆 Leaderboard",
-        "📊 History", "ℹ️ Help", "🔄 Refresh"
+    keyboard = [
+        [
+            InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
+            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw')
+        ],
+        [
+            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
+            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
+        ],
+        [
+            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
+            InlineKeyboardButton("🏆 Leaderboard", callback_data='top_referrals')
+        ],
+        [
+            InlineKeyboardButton("📊 History", callback_data='show_history'),
+            InlineKeyboardButton("ℹ️ Help", callback_data='help')
+        ]
     ]
     
-    keyboard = []
-    row = []
-    for button_text in buttons:
-        callback_data = {
-            '👥 Referrals': 'my_referrals',
-            '💰 Withdraw': 'withdraw',
-            '📅 Daily Bonus': 'daily_bonus',
-            '📝 Tasks': 'tasks',
-            '🧠 Quiz': 'quiz',
-            '🏆 Leaderboard': 'top_referrals',
-            '📊 History': 'show_history',
-            'ℹ️ Help': 'help',
-            '🔄 Refresh': 'refresh_dashboard'
-        }[button_text]
-        
-        row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
-        if len(row) == 3:
-            keyboard.append(row)
-            row = []
-    
-    if row:  # Add any remaining buttons
-        keyboard.append(row)
-        
     if show_back:
         keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     
@@ -2858,7 +2852,7 @@ def main():
 
     # Define payment handler for admin payment confirmation
     payment_handler = ConversationHandler(
-        entry_points=[CommandHandler("paid", handlepaid_command)],
+        entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
         },
