@@ -705,9 +705,9 @@ async def handle_withdrawal_start(update: Update, context: ContextTypes.DEFAULT_
 
     # Check minimum referrals requirement
     ref_count = len(get_referrals(user_id))
-    if ref_count < 10:
+    if ref_count < 5:
         await query.message.edit_text(
-            f"❌ You need at least 10 referrals to withdraw.\n"
+            f"❌ You need at least 5 referrals to withdraw.\n"
             f"You currently have {ref_count} referrals.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
