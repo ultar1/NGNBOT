@@ -118,34 +118,48 @@ async def check_and_credit_daily_bonus(user_id: int) -> bool:
     return False
 
 async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Notify the admin about a newly verified user.
+    """
     try:
-        referrer = await context.bot.get_chat(referrer_id) if referrer_id else None
+        # Fetch user and referrer information
         user = await context.bot.get_chat(user_id)
-        
-        admin_message = (
-            f"🆕 New User Verified!\n\n"
-            f"User Information:\n"
-            f"• ID: {user_id}\n"
-            f"• Username: @{user.username if user.username else 'None'}\n"
-            f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
-        )
-        
-        if referrer:
-            admin_message += (
-                f"Referred by:\n"
-                f"• ID: {referrer_id}\n"
-                f"• Username: @{referrer.username if referrer.username else 'None'}\n"
-                f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}"
-            )
-        else:
-            admin_message += "No referrer (direct join)"
-        
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_message
-        )
+        referrer = await context.bot.get_chat(referrer_id) if referrer_id else None
+
+        # Generate the admin notification message
+        admin_message = generate_admin_message(user, user_id, referrer, referrer_id)
+
+        # Send the message to the admin
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+
+        logging.info(f"Admin notified about new user ID: {user_id}")
     except Exception as e:
-        logging.error(f"Failed to send admin notification: {e}")
+        logging.error(f"Failed to send admin notification for user ID {user_id}. Error: {e}")
+
+
+def generate_admin_message(user, user_id, referrer, referrer_id):
+    """
+    Generate the message text for notifying the admin.
+    """
+    message = (
+        f"🆕 New User Verified!\n\n"
+        f"User Information:\n"
+        f"• ID: {user_id}\n"
+        f"• Username: @{user.username if user.username else 'None'}\n"
+        f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n\n"
+    )
+
+    if referrer:
+        message += (
+            f"Referred by:\n"
+            f"• ID: {referrer_id}\n"
+            f"• Username: @{referrer.username if referrer.username else 'None'}\n"
+            f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}"
+        )
+    else:
+        message += "No referrer (direct join)"
+
+    return message
 
 # Add logging to debug referral and notification logic
 async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_TYPE):
