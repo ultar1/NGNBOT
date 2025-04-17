@@ -326,7 +326,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
         f"Username: @{user.username if user.username else 'None'}\n\n"
         f"💰 Balance & Earnings:\n"
-        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
+        f"• Current Balance: ₦{balance}\n"
         f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
         f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
         f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
