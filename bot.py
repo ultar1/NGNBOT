@@ -2875,7 +2875,7 @@ def main():
         entry_points=[CommandHandler("paid", handle_paid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
-        ],
+        },
         fallbacks=[CommandHandler("start", start)]
     )
 
