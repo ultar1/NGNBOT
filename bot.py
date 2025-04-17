@@ -1600,6 +1600,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_task_1_menu(update, context)
     elif query.data == 'task_2':
         await handle_task_2_menu(update, context)
+    elif query.data == 'help':
+        await show_help(update, context)
 
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
@@ -2757,6 +2759,43 @@ async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await target_message.edit_text(
             "❌ Error loading referral information. Please try again.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
+        )
+
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help menu with available commands and instructions"""
+    help_text = (
+        "📖 Bot Help & Commands\n"
+        "═══════════════════\n\n"
+        "🎯 Available Commands:\n"
+        "/start - Start/restart the bot\n"
+        "/info - View your account info\n"
+        "/task - Submit task screenshot\n"
+        "/redeem - Redeem coupon code\n"
+        "/history - View transaction history\n\n"
+        "💰 Earning Methods:\n"
+        "• Daily Quiz: ₦50\n"
+        "• Referrals: ₦80/referral\n"
+        "• Tasks: ₦250/task\n"
+        "• Daily Bonus: ₦25\n"
+        "• Group Chat: ₦1/message (max 50/day)\n\n"
+        "💳 Withdrawal Info:\n"
+        "• Minimum: ₦500\n"
+        "• Requirements: 5 referrals\n"
+        "• Processing Time: 24h\n\n"
+        "❓ Need more help? Contact @star_ies1"
+    )
+
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+    
+    if update.callback_query:
+        await update.callback_query.message.edit_text(
+            help_text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text(
+            help_text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 def main():
