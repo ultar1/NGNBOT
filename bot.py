@@ -2217,18 +2217,33 @@ def initialize_database():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # Create user_balances table
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS user_balances (
                         user_id BIGINT PRIMARY KEY,
                         balance FLOAT DEFAULT 0
                     );
+                """)
 
+                # Create referrals table
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS referrals (
                         referrer_id BIGINT REFERENCES user_balances(user_id),
                         referred_id BIGINT REFERENCES user_balances(user_id),
                         PRIMARY KEY (referrer_id, referred_id)
                     );
                 """)
+
+                # Create task_earnings table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS task_earnings (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL REFERENCES user_balances(user_id),
+                        amount FLOAT NOT NULL,
+                        earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
                 conn.commit()
     except Exception as e:
         print(f"Error initializing database: {e}")
