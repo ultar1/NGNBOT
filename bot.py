@@ -1591,7 +1591,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
     elif query.data == 'tasks':
-        await handle_tasks_button(update, context)
+        await handle_task_buttons(update, context)
     elif query.data == 'quiz':
         await show_quiz_menu(update, context)
     elif query.data.startswith('quiz_'):
@@ -1716,21 +1716,13 @@ async def handle_task_rejection(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tasks button click and show task selection menu"""
+async def handle_task_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ensure three buttons per line for task selection"""
     keyboard = [
-        [InlineKeyboardButton("📱 Task 1: Referral Sharing", callback_data='task_1')],
-        [InlineKeyboardButton("👥 Task 2: Join Group", callback_data='task_2')],
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
+        [InlineKeyboardButton("📱 Task 1", callback_data='task_1'), InlineKeyboardButton("👥 Task 2", callback_data='task_2'), InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')]
     ]
-    
     await update.callback_query.message.edit_text(
-        "📋 Available Tasks\n"
-        "══════════════\n\n"
-        "Choose a task to complete:\n\n"
-        "1️⃣ Share your referral link\n"
-        "2️⃣ Join our community group\n\n"
-        "Select a task to view instructions!",
+        "📋 Available Tasks\n\nChoose a task to complete:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
