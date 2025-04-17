@@ -1409,93 +1409,128 @@ async def get_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(user.id):
         # Show user their own info if not admin
-        balance = get_user_balance(user.id)
-        referrals_list = get_referrals(user.id)
-        ref_count = len(referrals_list)
-        
-        # Get referral usernames
-        referral_info = []
-        for ref_id in referrals_list:
-            try:
-                ref_user = await context.bot.get_chat(ref_id)
-                username = f"@{ref_user.username}" if ref_user.username else f"User {ref_id}"
-                referral_info.append(username)
-            except Exception as e:
-                referral_info.append(f"User {ref_id}")
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get user balance and stats
+                cur.execute("""
+                    SELECT balance, total_earnings, referral_earnings, task_earnings
+                    FROM user_balances 
+                    WHERE user_id = %s
+                """, (user.id,))
+                user_data = cur.fetchone() or {'balance': 0}
                 
+                # Get referrals
+                cur.execute("""
+                    SELECT r.referred_id, u.username, u.first_name 
+                    FROM referrals r 
+                    LEFT JOIN user_info u ON r.referred_id = u.user_id 
+                    WHERE r.referrer_id = %s
+                """, (user.id,))
+                referrals = cur.fetchall()
+
         info_message = (
             f"👤 Your Information\n"
             f"───────────────\n"
             f"ID: {user.id}\n"
-            f"Balance: ₦{balance}\n"
-            f"Total Referrals: {ref_count}\n"
-            f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
+            f"Balance: ₦{user_data['balance']:,}\n"
+            f"Total Referrals: {len(referrals)}\n"
             f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
             f"Your Referrals:\n"
         )
-        
-        if referral_info:
-            for i, username in enumerate(referral_info, 1):
-                info_message += f"{i}. {username}\n"
+
+        if referrals:
+            for ref in referrals:
+                name = ref['first_name'] or 'Unknown'
+                username = ref['username'] or 'No username'
+                info_message += f"• {name} (@{username})\n"
         else:
-            info_message += "No referrals yet"
+            info_message += "No referrals yet\n"
             
         await update.message.reply_text(info_message)
         return
 
-    # Admin can check other users' info
+    # Admin checking other user's info
     if not context.args:
-        await update.message.reply_text("❌ Usage: /info <user_id>")
+        await update.message.reply_text(
+            "❌ Usage: /info <user_id or @username>\n"
+            "Examples:\n"
+            "• /info 123456789\n"
+            "• /info @username"
+        )
         return
 
     try:
-        target_user_id = int(context.args[0])
-        balance = get_user_balance(target_user_id)
-        referrals_list = get_referrals(target_user_id)
-        ref_count = len(referrals_list)
+        search_term = context.args[0]
         
-        try:
-            target_user = await context.bot.get_chat(target_user_id)
-            user_name = f"{target_user.first_name} {target_user.last_name if target_user.last_name else ''}"
-            username = f"@{target_user.username}" if target_user.username else "None"
-        except:
-            user_name = "Unknown"
-            username = "None"
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                if search_term.startswith('@'):
+                    # Search by username
+                    username = search_term[1:]
+                    cur.execute("""
+                        SELECT user_id, username, first_name
+                        FROM user_info
+                        WHERE username = %s
+                    """, (username,))
+                else:
+                    # Search by user ID
+                    try:
+                        user_id = int(search_term)
+                        cur.execute("""
+                            SELECT user_id, username, first_name
+                            FROM user_info
+                            WHERE user_id = %s
+                        """, (user_id,))
+                    except ValueError:
+                        await update.message.reply_text("❌ Invalid user ID! Use a number or @username")
+                        return
 
-        # Get referral usernames
-        referral_info = []
-        for ref_id in referrals_list:
-            try:
-                ref_user = await context.bot.get_chat(ref_id)
-                ref_username = f"@{ref_user.username}" if ref_user.username else f"User {ref_id}"
-                referral_info.append(ref_username)
-            except:
-                referral_info.append(f"User {ref_id}")
+                user_info = cur.fetchone()
+                if not user_info:
+                    await update.message.reply_text("❌ User not found!")
+                    return
+
+                # Get user balance
+                cur.execute("""
+                    SELECT * FROM user_balances 
+                    WHERE user_id = %s
+                """, (user_info['user_id'],))
+                user_data = cur.fetchone() or {'balance': 0}
+
+                # Get user's referrals
+                cur.execute("""
+                    SELECT r.referred_id, u.username, u.first_name
+                    FROM referrals r
+                    LEFT JOIN user_info u ON r.referred_id = u.user_id
+                    WHERE r.referrer_id = %s
+                """, (user_info['user_id'],))
+                referrals = cur.fetchall()
 
         info_message = (
             f"👤 User Information\n"
             f"───────────────\n"
-            f"ID: {target_user_id}\n"
-            f"Name: {user_name}\n"
-            f"Username: {username}\n"
-            f"Balance: ₦{balance}\n"
-            f"Total Referrals: {ref_count}\n"
-            f"Referral Earnings: ₦{ref_count * REFERRAL_BONUS}\n"
+            f"ID: {user_info['user_id']}\n"
+            f"Name: {user_info['first_name']}\n"
+            f"Username: @{user_info['username'] or 'None'}\n"
+            f"Balance: ₦{user_data['balance']:,}\n"
+            f"Total Referrals: {len(referrals)}\n"
             f"Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
             f"User's Referrals:\n"
         )
-        
-        if referral_info:
-            for i, username in enumerate(referral_info, 1):
-                info_message += f"{i}. {username}\n"
+
+        if referrals:
+            for ref in referrals:
+                name = ref['first_name'] or 'Unknown'
+                username = ref['username'] or 'No username'
+                info_message += f"• {name} (@{username})\n"
         else:
-            info_message += "No referrals"
-            
+            info_message += "No referrals\n"
+
         await update.message.reply_text(info_message)
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
+
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        logging.error(f"Error in get_user_info: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching user information")
 
 async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command to get chat ID"""
