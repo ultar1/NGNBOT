@@ -2214,24 +2214,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 # Ensure database tables exist
 def initialize_database():
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS user_balances (
-                    user_id BIGINT PRIMARY KEY,
-                    balance INT DEFAULT 0
-                );
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS user_balances (
+                        user_id BIGINT PRIMARY KEY,
+                        balance FLOAT DEFAULT 0
+                    );
 
-                CREATE TABLE IF NOT EXISTS referrals (
-                    referrer_id BIGINT,
-                    referred_id BIGINT,
-                    PRIMARY KEY (referrer_id, referred_id)
-                );
-            """)
-            conn.commit()
-
-# Call initialize_database at startup
-initialize_database()
+                    CREATE TABLE IF NOT EXISTS referrals (
+                        referrer_id BIGINT REFERENCES user_balances(user_id),
+                        referred_id BIGINT REFERENCES user_balances(user_id),
+                        PRIMARY KEY (referrer_id, referred_id)
+                    );
+                """)
+                conn.commit()
+    except Exception as e:
+        print(f"Error initializing database: {e}")
 
 # Periodic saving interval in seconds
 SAVE_INTERVAL = 300  # Save every 5 minutes
