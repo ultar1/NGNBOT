@@ -2796,6 +2796,16 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+async def handle_task_submit_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task submission button"""
+    try:
+        user_id = update.effective_user.id
+        # Ensure user balance is updated correctly
+        balance = get_user_balance(user_id)
+        await update.message.reply_text(f"Your current balance is ₦{balance}.")
+    except Exception as e:
+        logging.error(f"Error handling task submit button: {e}")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -2882,6 +2892,7 @@ def main():
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_submit_button))  # Register task submit button handler
 
     # Register the logging handler
     application.add_handler(MessageHandler(filters.ALL, log_all_updates))
