@@ -304,19 +304,28 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     await show_loading_animation(target_message, "Loading dashboard", 1)
     
     user = update.effective_user
-    user_data = get_total_earnings(user.id)
+    # Get user data from database
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Get user balance and earnings
+            cur.execute("""
+                SELECT balance, total_earnings, referral_earnings, task_earnings
+                FROM user_balances
+                WHERE user_id = %s
+            """, (user.id,))
+            user_data = cur.fetchone() or {
+                'balance': 0,
+                'total_earnings': 0,
+                'referral_earnings': 0,
+                'task_earnings': 0
+            }
+            
+            # Get referral count
+            cur.execute("SELECT COUNT(*) as ref_count FROM referrals WHERE referrer_id = %s", (user.id,))
+            ref_count = cur.fetchone()['ref_count']
+
     daily_chats = daily_chat_count.get(user.id, 0)
     chats_remaining = MAX_DAILY_CHAT_REWARD - daily_chats
-
-    # Check milestones
-    ref_count = user_data['referral_count']
-    milestones_reached = []
-    next_milestone = None
-    for milestone in sorted([5, 10, 20, 50, 100]):
-        if ref_count >= milestone:
-            milestones_reached.append(milestone)
-        elif next_milestone is None:
-            next_milestone = milestone
     
     dashboard_text = (
         f"📱 {BOT_USERNAME} Dashboard\n"
@@ -326,56 +335,53 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
         f"Username: @{user.username if user.username else 'None'}\n\n"
         f"💰 Balance & Earnings:\n"
-        f"• Current Balance: ₦{user_data['current_balance']:,}\n"
+        f"• Current Balance: ₦{user_data['balance']:,}\n"
         f"• Total Earnings: ₦{user_data['total_earnings']:,}\n"
         f"  ↳ From Referrals: ₦{user_data['referral_earnings']:,}\n"
         f"  ↳ From Tasks: ₦{user_data['task_earnings']:,}\n\n"
         f"👥 Referral Stats:\n"
         f"• Total Referrals: {ref_count}\n"
-        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n"
-    )
-
-    if next_milestone:
-        dashboard_text += f"• Next Milestone: {next_milestone} referrals\n"
-
-    dashboard_text += (
-        f"\n📊 Today's Activity:\n"
+        f"• Earnings/Referral: ₦{REFERRAL_BONUS}\n\n"
+        f"📊 Today's Activity:\n"
         f"• Chat Earnings: {daily_chats}/50 (₦{daily_chats})\n"
         f"• Remaining Chats: {chats_remaining}\n\n"
-        f"💫 Achievements:\n"
-    )
-
-    if milestones_reached:
-        dashboard_text += f"• Milestones: {', '.join(f'{m}✓' for m in milestones_reached)} referrals\n"
-    else:
-        dashboard_text += "• No milestones reached yet\n"
-
-    dashboard_text += (
-        f"\n💡 Quick Tips:\n"
+        f"💡 Quick Tips:\n"
         f"• Min Withdrawal: ₦{MIN_WITHDRAWAL:,}\n"
         f"• Daily Quiz: ₦50 reward\n"
-        f"• Task Reward: ₦{TASK_REWARD}"
+        f"• Task Reward: ₦{TASK_REWARD}\n"
+        f"• Use /task to submit tasks"
     )
     
-    keyboard = [
-        [
-            InlineKeyboardButton("👥 Referrals", callback_data='my_referrals'),
-            InlineKeyboardButton("💰 Withdraw", callback_data='withdraw')
-        ],
-        [
-            InlineKeyboardButton("📅 Daily Bonus", callback_data='daily_bonus'),
-            InlineKeyboardButton("📝 Tasks", callback_data='tasks')
-        ],
-        [
-            InlineKeyboardButton("🧠 Quiz", callback_data='quiz'),
-            InlineKeyboardButton("🏆 Leaderboard", callback_data='top_referrals')
-        ],
-        [
-            InlineKeyboardButton("📊 History", callback_data='show_history'),
-            InlineKeyboardButton("ℹ️ Help", callback_data='help')
-        ]
+    # Organize buttons in rows of 3
+    buttons = [
+        "👥 Referrals", "💰 Withdraw", "📅 Daily Bonus",
+        "📝 Tasks", "🧠 Quiz", "🏆 Leaderboard",
+        "📊 History", "ℹ️ Help", "🔄 Refresh"
     ]
     
+    keyboard = []
+    row = []
+    for button_text in buttons:
+        callback_data = {
+            '👥 Referrals': 'my_referrals',
+            '💰 Withdraw': 'withdraw',
+            '📅 Daily Bonus': 'daily_bonus',
+            '📝 Tasks': 'tasks',
+            '🧠 Quiz': 'quiz',
+            '🏆 Leaderboard': 'top_referrals',
+            '📊 History': 'show_history',
+            'ℹ️ Help': 'help',
+            '🔄 Refresh': 'refresh_dashboard'
+        }[button_text]
+        
+        row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
+        if len(row) == 3:
+            keyboard.append(row)
+            row = []
+    
+    if row:  # Add any remaining buttons
+        keyboard.append(row)
+        
     if show_back:
         keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')])
     
@@ -1591,7 +1597,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]])
         )
     elif query.data == 'tasks':
-        await handle_task_buttons(update, context)
+        await handle_tasks_button(update, context)
     elif query.data == 'quiz':
         await show_quiz_menu(update, context)
     elif query.data.startswith('quiz_'):
@@ -1716,13 +1722,21 @@ async def handle_task_rejection(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-async def handle_task_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ensure three buttons per line for task selection"""
+async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tasks button click and show task selection menu"""
     keyboard = [
-        [InlineKeyboardButton("📱 Task 1", callback_data='task_1'), InlineKeyboardButton("👥 Task 2", callback_data='task_2'), InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')]
+        [InlineKeyboardButton("📱 Task 1: Referral Sharing", callback_data='task_1')],
+        [InlineKeyboardButton("👥 Task 2: Join Group", callback_data='task_2')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]
     ]
+    
     await update.callback_query.message.edit_text(
-        "📋 Available Tasks\n\nChoose a task to complete:",
+        "📋 Available Tasks\n"
+        "══════════════\n\n"
+        "Choose a task to complete:\n\n"
+        "1️⃣ Share your referral link\n"
+        "2️⃣ Join our community group\n\n"
+        "Select a task to view instructions!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1775,30 +1789,32 @@ async def notify_admin_verified_user(user_id: int, referrer_id: int, context: Co
     try:
         user = await context.bot.get_chat(user_id)
         referrer = await context.bot.get_chat(referrer_id) if referrer_id else None
-
+        
         admin_message = (
             "🆕 New User Verified!\n\n"
-            f"👤 User Information:\n"
+            f"👤 New User:\n"
             f"• ID: {user_id}\n"
             f"• Name: {user.first_name} {user.last_name if user.last_name else ''}\n"
-            f"• Username: @{user.username if user.username else 'None'}\n"
-            f"• Welcome Bonus: ₦{WELCOME_BONUS}\n\n"
+            f"• Username: @{user.username if user.username else 'None'}\n\n"
         )
-
+        
         if referrer:
             admin_message += (
                 f"👥 Referred By:\n"
                 f"• ID: {referrer_id}\n"
                 f"• Name: {referrer.first_name} {referrer.last_name if referrer.last_name else ''}\n"
                 f"• Username: @{referrer.username if referrer.username else 'None'}\n"
-                f"• Referral Bonus: ₦{REFERRAL_BONUS}"
+                f"• Total Referrals: {len(get_referrals(referrer_id))}"
             )
         else:
             admin_message += "Direct Join (No Referrer)"
-
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message
+        )
     except Exception as e:
-        logging.error(f"Failed to notify admin about new user {user_id}: {e}")
+        print(f"Failed to send admin notification: {e}")
 
 # Expand quiz data to 50 harder and clearer questions
 quiz_data = [
@@ -1942,7 +1958,7 @@ def log_transaction(user_id: int, transaction_type: str, amount: int):
     })
 
 async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the user's earning and withdrawal history"""
+    """Show the user's transaction history"""
     user_id = update.effective_user.id
     history = transaction_history.get(user_id, [])
 
@@ -2653,26 +2669,45 @@ def process_milestone_reward(user_id: int, ref_count: int) -> int:
 def get_total_earnings(user_id: int) -> dict:
     """Get breakdown of user's total earnings"""
     try:
-        referrals_list = get_referrals(user_id)
-        referral_earnings = len(referrals_list) * REFERRAL_BONUS
-        task_earnings = get_user_task_earnings(user_id)  # Assuming a function exists to fetch task earnings
-        current_balance = get_user_balance(user_id)
-
-        return {
-            'referral_count': len(referrals_list),
-            'referral_earnings': referral_earnings,
-            'task_earnings': task_earnings,
-            'total_earnings': referral_earnings + task_earnings,
-            'current_balance': current_balance
-        }
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get task earnings
+                cur.execute("""
+                    SELECT COALESCE(SUM(amount), 0) as task_total
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%task%'
+                """, (user_id,))
+                result = cur.fetchone()
+                task_earnings = result['task_total'] if result else 0
+                
+                # Get referral count
+                cur.execute("SELECT COUNT(*) as ref_count FROM referrals WHERE referrer_id = %s", (user_id,))
+                result = cur.fetchone()
+                ref_count = result['ref_count'] if result else 0
+                
+                # Calculate referral earnings
+                referral_earnings = ref_count * REFERRAL_BONUS
+                
+                # Get total balance
+                cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+                result = cur.fetchone()
+                current_balance = result['balance'] if result else 0
+                
+                return {
+                    'task_earnings': task_earnings,
+                    'referral_earnings': referral_earnings,
+                    'referral_count': ref_count,
+                    'current_balance': current_balance,
+                    'total_earnings': task_earnings + referral_earnings
+                }
     except Exception as e:
-        logging.error(f"Error calculating total earnings for user {user_id}: {e}")
+        logging.error(f"Error getting total earnings: {str(e)}")
         return {
-            'referral_count': 0,
-            'referral_earnings': 0,
             'task_earnings': 0,
-            'total_earnings': 0,
-            'current_balance': 0
+            'referral_earnings': 0,
+            'referral_count': 0,
+            'current_balance': 0,
+            'total_earnings': 0
         }
 
 async def show_referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2769,55 +2804,6 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-async def handle_task_submit_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle task submission button"""
-    try:
-        user_id = update.effective_user.id
-        # Check if the user is verified
-        if not is_user_verified(user_id):
-            await update.message.reply_text("❌ You need to verify your membership before submitting tasks.")
-            return
-
-        # Check if the command is replying to a message with a photo
-        reply_to_message = update.message.reply_to_message
-        photo = None
-
-        if reply_to_message and reply_to_message.photo:
-            photo = reply_to_message.photo[-1]
-        elif update.message.photo:
-            photo = update.message.photo[-1]
-
-        if not photo:
-            await update.message.reply_text(
-                "❌ Please either:\n"
-                "1. Attach a screenshot with the /task command, or\n"
-                "2. Reply to a screenshot with the /task command"
-            )
-            return
-
-        # Notify admin about the submission
-        admin_message = (
-            f"📝 New Task Submission!\n\n"
-            f"From User:\n"
-            f"• ID: {user_id}\n"
-            f"• Username: @{update.effective_user.username if update.effective_user.username else 'None'}\n"
-            f"• Name: {update.effective_user.first_name} {update.effective_user.last_name if update.effective_user.last_name else ''}"
-        )
-
-        await context.bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=photo.file_id,
-            caption=admin_message + f"\n\nUse /approve_task {user_id} to approve\nUse /reject_task {user_id} to reject"
-        )
-
-        await update.message.reply_text(
-            "✅ Your task screenshot has been submitted for review!\n"
-            "You will receive your reward once approved."
-        )
-    except Exception as e:
-        logging.error(f"Error handling task submit button: {e}")
-        await update.message.reply_text("❌ Error submitting task. Please try again later.")
-
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -2872,7 +2858,7 @@ def main():
 
     # Define payment handler for admin payment confirmation
     payment_handler = ConversationHandler(
-        entry_points=[CommandHandler("paid", handle_paid_command)],
+        entry_points=[CommandHandler("paid", handlepaid_command)],
         states={
             PAYMENT_SCREENSHOT: [MessageHandler(filters.PHOTO, handle_payment_screenshot)]
         },
@@ -2904,7 +2890,6 @@ def main():
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_submit_button))  # Register task submit button handler
 
     # Register the logging handler
     application.add_handler(MessageHandler(filters.ALL, log_all_updates))
