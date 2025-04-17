@@ -1942,7 +1942,7 @@ def log_transaction(user_id: int, transaction_type: str, amount: int):
     })
 
 async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the user's transaction history"""
+    """Show the user's earning and withdrawal history"""
     user_id = update.effective_user.id
     history = transaction_history.get(user_id, [])
 
