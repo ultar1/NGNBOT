@@ -173,6 +173,7 @@ async def process_pending_referral(user_id: int, context: ContextTypes.DEFAULT_T
         if referrer_id != user_id and user_id not in get_referrals(referrer_id):
             # Add to referrals and credit bonus
             add_referral(referrer_id, user_id)
+            update_user_balance(referrer_id, REFERRAL_BONUS)  # Ensure referral bonus is added
             logging.info(f"Referral bonus credited to referrer_id: {referrer_id}.")
 
             try:
