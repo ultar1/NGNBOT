@@ -402,94 +402,94 @@ check_membership = check_and_handle_membership_change
 
 
         # Check if user is already verified to avoid duplicate welcome bonus
-        is_verified = is_user_verified(user_id)
+is_verified = is_user_verified(user_id)
 
-        if not is_verified:
-            # Give welcome bonus to new users
-            update_user_balance(user_id, WELCOME_BONUS)
-            set_user_verified(user_id, True)  # Mark user as verified
+if not is_verified:
+    # Give welcome bonus to new users
+    update_user_balance(user_id, WELCOME_BONUS)
+    set_user_verified(user_id, True)  # Mark user as verified
 
-            if query.message:
-                await query.message.edit_text(
-                    "✅ Verification Successful!\n\n"
-                    f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
-                    "Loading your dashboard..."
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        "✅ Verification Successful!\n\n"
-                        f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
-                        "Loading your dashboard..."
-                    )
-                )
-
-            # Process referral if exists
-            referrer_id = pending_referrals.get(user_id)
-            if referrer_id and referrer_id != user_id:  # Prevent self-referral
-                # Add referral and credit bonus
-                add_referral(referrer_id, user_id)
-                update_user_balance(referrer_id, REFERRAL_BONUS)
-
-                # Check and process milestone rewards
-                ref_count = len(get_referrals(referrer_id))
-                milestone_reward = process_milestone_reward(referrer_id, ref_count)
-
-                # Notify referrer with combined message
-                notification = (
-                    f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!"
-                )
-                if milestone_reward > 0:
-                    notification += f"\n🎯 Bonus: ₦{milestone_reward} for reaching {ref_count} referrals milestone!"
-                notification += f"\nNew balance: ₦{get_user_balance(referrer_id)}"
-
-                try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=notification
-                    )
-                except Exception as e:
-                    logging.error(f"Failed to notify referrer: {e}")
-
-                # Remove from pending referrals
-                pending_referrals.pop(user_id, None)
-
-            # Notify admin about new user
-            await notify_admin_new_user(user_id, {}, referrer_id if referrer_id else None, context)
-        else:
-            if query.message:
-                await query.message.edit_text(
-                    "✅ Verification Successful!\n"
-                    "Loading your dashboard..."
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        "✅ Verification Successful!\n"
-                        "Loading your dashboard..."
-                    )
-                )
-
-        # Show dashboard after verification
-        await show_dashboard(update, context)
-
-    except Exception as e:
-        logging.error(f"Error in verification: {e}")
-        if query.message:
-            await query.message.edit_text(
-                "❌ An error occurred during verification. Please try again later.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+    if query.message:
+        await query.message.edit_text(
+            "✅ Verification Successful!\n\n"
+            f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
+            "Loading your dashboard..."
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "✅ Verification Successful!\n\n"
+                f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
+                "Loading your dashboard..."
             )
-        else:
+        )
+
+    # Process referral if exists
+    referrer_id = pending_referrals.get(user_id)
+    if referrer_id and referrer_id != user_id:  # Prevent self-referral
+        # Add referral and credit bonus
+        add_referral(referrer_id, user_id)
+        update_user_balance(referrer_id, REFERRAL_BONUS)
+
+        # Check and process milestone rewards
+        ref_count = len(get_referrals(referrer_id))
+        milestone_reward = process_milestone_reward(referrer_id, ref_count)
+
+        # Notify referrer with combined message
+        notification = (
+            f"🎉 You earned ₦{REFERRAL_BONUS} for referring a new user!"
+        )
+        if milestone_reward > 0:
+            notification += f"\n🎯 Bonus: ₦{milestone_reward} for reaching {ref_count} referrals milestone!"
+        notification += f"\nNew balance: ₦{get_user_balance(referrer_id)}"
+
+        try:
             await context.bot.send_message(
-                chat_id=user_id,
-                text=(
-                    "❌ An error occurred during verification. Please try again later."
-                ),
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+                chat_id=referrer_id,
+                text=notification
             )
+        except Exception as e:
+            logging.error(f"Failed to notify referrer: {e}")
+
+        # Remove from pending referrals
+        pending_referrals.pop(user_id, None)
+
+    # Notify admin about new user
+    await notify_admin_new_user(user_id, {}, referrer_id if referrer_id else None, context)
+else:
+    if query.message:
+        await query.message.edit_text(
+            "✅ Verification Successful!\n"
+            "Loading your dashboard..."
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "✅ Verification Successful!\n"
+                "Loading your dashboard..."
+            )
+        )
+
+# Show dashboard after verification
+await show_dashboard(update, context)
+
+except Exception as e:
+    logging.error(f"Error in verification: {e}")
+    if query.message:
+        await query.message.edit_text(
+            "❌ An error occurred during verification. Please try again later.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "❌ An error occurred during verification. Please try again later."
+            ),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+        )
 # User balance operations
 
 def get_user_balance(user_id):
