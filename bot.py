@@ -336,62 +336,70 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle verification button click"""
-    query = update.callback_query
-    user_id = query.from_user.id
-
-    await query.answer("🔍 Checking membership status...")
-
+async def check_and_handle_membership_change(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
-        # Ensure query.message is not None
-        if query.message:
-            await query.message.edit_text(
-                "⏳ Verifying your membership...\n"
-                "Please wait a moment."
-            )
-        else:
-            # Fallback to sending a new message if query.message is None
+        logging.info(f"User {user_id}: Checking membership status")
+
+        # Check channel membership
+        try:
+            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+        except Exception as e:
+            logging.error(f"Error checking channel membership: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="⏳ Verifying your membership...\nPlease wait a moment."
+                text=("❌ Unable to verify your channel membership. Please ensure you have joined the required channel. "
+                      "If the issue persists, try again later.")
+            )
+            return False
+
+        # Check group membership
+        try:
+            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+        except Exception as e:
+            logging.error(f"Error checking group membership: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=("❌ Unable to verify your group membership. Please ensure you have joined the required group. "
+                      "If the issue persists, try again later.")
+            )
+            return False
+
+        valid_member_status = [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER
+        ]
+
+        is_verified = (
+            channel_member.status in valid_member_status and
+            group_member.status in valid_member_status
+        )
+
+        logging.info(f"User {user_id}: Membership verified: {is_verified}")
+
+        user_verified_status[user_id] = is_verified
+
+        if (is_verified):
+            await process_pending_referral(user_id, context)
+        else:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=("❌ Verification failed. Please ensure you have joined both the required channel and group. "
+                      "If you believe this is an error, contact support.")
             )
 
-        # Membership check
-        is_member = await check_membership(user_id, context)
-        if not is_member:
-            # Verification failed
-            keyboard = [
-                [
-                    InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}"),
-                    InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP)
-                ],
-                [InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]
-            ]
-            if query.message:
-                await query.message.edit_text(
-                    "❌ Verification Failed!\n\n"
-                    "Please make sure to:\n"
-                    "1. Join our channel\n"
-                    "2. Join our group\n"
-                    "3. Stay in both\n\n"
-                    "Then click 'Try Again'",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        "❌ Verification Failed!\n\n"
-                        "Please make sure to:\n"
-                        "1. Join our channel\n"
-                        "2. Join our group\n"
-                        "3. Stay in both\n\n"
-                        "Then click 'Try Again'"
-                    ),
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            return
+        return is_verified
+    except Exception as e:
+        logging.error(f"Unexpected error in check_and_handle_membership_change: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=("❌ An unexpected error occurred during verification. Please try again later. "
+                  "If the issue persists, contact support.")
+        )
+        return False
+
+check_membership = check_and_handle_membership_change
+
 
         # Check if user is already verified to avoid duplicate welcome bonus
         is_verified = is_user_verified(user_id)
@@ -2679,45 +2687,51 @@ async def command_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /info command to fetch user information by ID or username"""
     try:
         # Get the target user ID or username from arguments
-        if context.args:
-            input_str = context.args[0]
-            if input_str.startswith('@'):
-                # If input is a username, fetch user ID
-                try:
-                    user = await context.bot.get_chat(input_str)
-                    target_user_id = user.id
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Could not find user with username {input_str}. Error: {e}")
-                    return
-            else:
-                # If input is a user ID, parse it
-                try:
-                    target_user_id = int(input_str)
-                except ValueError:
-                    await update.message.reply_text("❌ Invalid user ID format. Please provide a valid ID or username.")
-                    return
-        else:
-            # Default to the command issuer's ID if no argument is provided
-            target_user_id = update.effective_user.id
+        args = context.args
+        if not args:
+            await update.message.reply_text("❌ Please provide a user ID or username. Usage: /info <user_id|username>")
+            return
 
-        # Fetch user data
-        balance = get_user_balance(target_user_id)
-        referrals = get_referrals(target_user_id)
-        referral_count = len(referrals)
-        is_verified = is_user_verified(target_user_id)
+        input_str = args[0]
+        user_id = await get_user_id_from_input(context, input_str)
 
-        # Format user information
+        if not user_id:
+            await update.message.reply_text(f"❌ Could not find user with input: {input_str}")
+            return
+
+        # Fetch user details
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+                user_data = cur.fetchone()
+
+        if not user_data:
+            await update.message.reply_text(f"❌ No data found for user ID: {user_id}")
+            return
+
+        # Fetch referrals
+        referrals = get_referrals(user_id)
+        referral_usernames = []
+        for ref_id in referrals:
+            ref_user = await context.bot.get_chat(ref_id)
+            referral_usernames.append(f"@{ref_user.username}" if ref_user.username else "(No username)")
+
+        # Format and send the user info message
         info_message = (
             f"👤 User Information\n"
-            f"User ID: {target_user_id}\n"
-            f"Balance: ₦{balance}\n"
-            f"Total Referrals: {referral_count}\n"
-            f"Verified: {'✅' if is_verified else '❌'}\n"
+            f"───────────────\n"
+            f"ID: {user_data['id']}\n"
+            f"Username: @{user_data['username'] if user_data['username'] else 'None'}\n"
+            f"Name: {user_data['first_name']} {user_data['last_name'] if user_data['last_name'] else ''}\n"
+            f"Balance: ₦{user_data['balance']:,}\n"
+            f"Total Referrals: {len(referrals)}\n"
+            f"Referrals: {', '.join(referral_usernames) if referral_usernames else 'None'}"
         )
 
         await update.message.reply_text(info_message)
+
     except Exception as e:
-        logging.error(f"Error in command_info: {e}")
+        logging.error(f"Error in /info command: {e}")
         await update.message.reply_text("❌ An error occurred while fetching user information. Please try again later.")
 
 def process_milestone_reward(user_id: int, ref_count: int) -> int:
