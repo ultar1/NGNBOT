@@ -399,9 +399,6 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
         return False
 
 check_membership = check_and_handle_membership_change
-
-
-        # Check if user is already verified to avoid duplicate welcome bonus
 is_verified = is_user_verified(user_id)
 
 if not is_verified:
