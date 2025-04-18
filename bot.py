@@ -1945,23 +1945,29 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Fetch earnings history
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT activity, amount, timestamp 
                     FROM user_activities 
                     WHERE user_id = %s AND activity LIKE '%earning%'
                     ORDER BY timestamp DESC
                     LIMIT 10
-                """, (user_id,))
+                    """,
+                    (user_id,)
+                )
                 earnings = cur.fetchall()
 
                 # Fetch withdrawal history
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT activity, amount, timestamp 
                     FROM user_activities 
                     WHERE user_id = %s AND activity LIKE '%withdrawal%'
                     ORDER BY timestamp DESC
                     LIMIT 10
-                """, (user_id,))
+                    """,
+                    (user_id,)
+                )
                 withdrawals = cur.fetchall()
 
         message = "📜 Your Transaction History\n\n"
