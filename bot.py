@@ -204,7 +204,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         # Check channel membership
         try:
-            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+            channel_member = await context.bot.get_chat_member(chat_id=REQUIRED_CHANNEL, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking channel membership: {e}")
             await context.bot.send_message(
@@ -216,7 +216,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         # Check group membership
         try:
-            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+            group_member = await context.bot.get_chat_member(chat_id=GROUP_USERNAME, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking group membership: {e}")
             await context.bot.send_message(
@@ -241,7 +241,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         user_verified_status[user_id] = is_verified
 
-        if (is_verified):
+        if is_verified:
             await process_pending_referral(user_id, context)
         else:
             await context.bot.send_message(
@@ -342,7 +342,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         # Check channel membership
         try:
-            channel_member = await context.bot.getChatMember(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+            channel_member = await context.bot.get_chat_member(chat_id=REQUIRED_CHANNEL, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking channel membership: {e}")
             await context.bot.send_message(
@@ -354,7 +354,7 @@ async def check_and_handle_membership_change(user_id: int, context: ContextTypes
 
         # Check group membership
         try:
-            group_member = await context.bot.getChatMember(chat_id=GROUP_USERNAME, user_id=user_id)
+            group_member = await context.bot.get_chat_member(chat_id=GROUP_USERNAME, user_id=user_id)
         except Exception as e:
             logging.error(f"Error checking group membership: {e}")
             await context.bot.send_message(
