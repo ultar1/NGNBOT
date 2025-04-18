@@ -2951,6 +2951,7 @@ def main():
     application.add_handler(CommandHandler("history", show_transaction_history))
     application.add_handler(CommandHandler("db", admin_dashboard))
     application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
+    application.add_handler(CommandHandler("id", get_user_id))  # Add the /id command handler
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
@@ -3000,3 +3001,16 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the /id command to fetch user ID by username"""
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a username. Usage: /id <username>")
+        return
+
+    username = context.args[0].lstrip('@')
+    try:
+        user = await context.bot.get_chat(f"@{username}")
+        await update.message.reply_text(f"✅ User ID for @{username}: {user.id}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error fetching user ID for @{username}: {str(e)}")
