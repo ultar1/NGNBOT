@@ -3039,3 +3039,39 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ User ID for @{username}: {user.id}")
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching user ID for @{username}: {str(e)}")
+
+def get_user_data(user_id):
+    """Fetch user data such as verification status and balance."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT verified FROM user_verification WHERE user_id = %s", (user_id,))
+                verified_row = cur.fetchone()
+                verified = verified_row['verified'] if verified_row else False
+
+                cur.execute("SELECT balance FROM user_balances WHERE user_id = %s", (user_id,))
+                balance_row = cur.fetchone()
+                balance = balance_row['balance'] if balance_row else 0
+
+        return {
+            'is_verified': verified,
+            'balance': balance
+        }
+    except Exception as e:
+        logging.error(f"Error fetching user data for user {user_id}: {e}")
+        return {
+            'is_verified': False,
+            'balance': 0
+        }
+
+def get_user_task_earnings(user_id):
+    """Fetch the total task earnings for a user."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT SUM(amount) as total FROM task_earnings WHERE user_id = %s", (user_id,))
+                row = cur.fetchone()
+                return row['total'] if row and row['total'] else 0
+    except Exception as e:
+        logging.error(f"Error fetching task earnings for user {user_id}: {e}")
+        return 0
