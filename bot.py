@@ -1988,10 +1988,17 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
         else:
             message += "No recent withdrawals\n"
 
-        await update.message.reply_text(message)
+        if update.message:
+            await update.message.reply_text(message)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(message)
     except Exception as e:
         logging.error(f"Error fetching transaction history: {e}")
-        await update.message.reply_text("❌ Error fetching history. Please try again later.")
+        error_message = "❌ Error fetching history. Please try again later."
+        if update.message:
+            await update.message.reply_text(error_message)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(error_message)
 
 # Add admin dashboard
 async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
