@@ -2868,6 +2868,18 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             help_text,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the /id command to fetch user ID by username"""
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a username. Usage: /id <username>")
+        return
+
+    username = context.args[0].lstrip('@')
+    try:
+        user = await context.bot.get_chat(f"@{username}")
+        await update.message.reply_text(f"✅ User ID for @{username}: {user.id}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error fetching user ID for @{username}: {str(e)}")
 
 def main():
     # Get environment variables with fallbacks
