@@ -400,7 +400,8 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                         "❌ Verification Failed!\n\n"
                         "Please make sure to:\n"
                         "1. Join our channel\n"
-                        "2. Join our group\n                        "3. Stay in both\n\n"
+                        "2. Join our group\n                      
+                        "3. Stay in both\n\n"
                         "Then click 'Try Again'"
                     ),
                     reply_markup=InlineKeyboardMarkup(keyboard)
