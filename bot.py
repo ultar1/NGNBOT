@@ -718,23 +718,27 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
 
 # Modified /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the start command"""
     user = update.effective_user
     args = context.args
+
     # Handle referral
     if args:
         try:
             referrer_id = int(args[0])
-            if referrer_id != user.id:
+            if referrer_id != user.id:  # Prevent self-referral
                 pending_referrals[user.id] = referrer_id
                 logging.info(f"Stored pending referral: {referrer_id} -> {user.id}")
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
+
     # Check if user is new (not verified)
     is_verified = is_user_verified(user.id)
     if not is_verified:
-        # New user: send CAPTCHA
+        # New user: send CAPTCHA first
         await send_captcha(update, context)
         return
+
     # Existing user: check membership
     is_member = await check_membership(user.id, context)
     if is_member:
@@ -2670,8 +2674,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Always show verification menu on /start
-    await show_verification_menu(update, context)
+    # Check if user is new (not verified)
+    is_verified = is_user_verified(user.id)
+    if not is_verified:
+        # New user: send CAPTCHA first
+        await send_captcha(update, context)
+        return
+
+    # Existing user: check membership
+    is_member = await check_membership(user.id, context)
+    if is_member:
+        # Already a member, show dashboard
+        keyboard = [[InlineKeyboardButton("Go to Dashboard", callback_data='back_to_menu')]]
+        await update.message.reply_text(
+            "👋 Welcome back! You are already verified.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Not a member, show verification menu
+        await show_verification_menu(update, context)
     return
 
 async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
