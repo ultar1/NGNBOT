@@ -350,8 +350,13 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                 "⏳ Verifying your membership...\n"
                 "Please wait a moment."
             )
+        elif update.message:
+            # Fallback to sending a new message if update.message exists
+            await update.message.reply_text(
+                "⏳ Verifying your membership...\nPlease wait a moment."
+            )
         else:
-            # Fallback to sending a new message if query.message is None
+            # Fallback to sending a new message if neither query.message nor update.message exists
             await context.bot.send_message(
                 chat_id=user_id,
                 text="⏳ Verifying your membership...\nPlease wait a moment."
@@ -378,6 +383,16 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     "Then click 'Try Again'",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+            elif update.message:
+                await update.message.reply_text(
+                    "❌ Verification Failed!\n\n"
+                    "Please make sure to:\n"
+                    "1. Join our channel\n"
+                    "2. Join our group\n"
+                    "3. Stay in both\n\n"
+                    "Then click 'Try Again'",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
             else:
                 await context.bot.send_message(
                     chat_id=user_id,
@@ -385,8 +400,7 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                         "❌ Verification Failed!\n\n"
                         "Please make sure to:\n"
                         "1. Join our channel\n"
-                        "2. Join our group\n"
-                        "3. Stay in both\n\n"
+                        "2. Join our group\n                        "3. Stay in both\n\n"
                         "Then click 'Try Again'"
                     ),
                     reply_markup=InlineKeyboardMarkup(keyboard)
@@ -403,6 +417,12 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
 
             if query.message:
                 await query.message.edit_text(
+                    "✅ Verification Successful!\n\n"
+                    f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
+                    "Loading your dashboard..."
+                )
+            elif update.message:
+                await update.message.reply_text(
                     "✅ Verification Successful!\n\n"
                     f"🎁 You received ₦{WELCOME_BONUS} welcome bonus!\n"
                     "Loading your dashboard..."
@@ -455,6 +475,11 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                     "✅ Verification Successful!\n"
                     "Loading your dashboard..."
                 )
+            elif update.message:
+                await update.message.reply_text(
+                    "✅ Verification Successful!\n"
+                    "Loading your dashboard..."
+                )
             else:
                 await context.bot.send_message(
                     chat_id=user_id,
@@ -471,6 +496,11 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
         logging.error(f"Error in verification: {e}")
         if query.message:
             await query.message.edit_text(
+                "❌ An error occurred during verification. Please try again later.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
+            )
+        elif update.message:
+            await update.message.reply_text(
                 "❌ An error occurred during verification. Please try again later.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
             )
