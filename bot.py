@@ -114,14 +114,41 @@ def generate_coupon_code(length=8):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 async def check_and_credit_daily_bonus(user_id: int) -> bool:
+    """Check and credit daily bonus using the database"""
     today = datetime.now().date()
-    last_date = last_signin.get(user_id)
-    
-    if last_date is None or last_date < today:
-        last_signin[user_id] = today
-        update_user_balance(user_id, DAILY_BONUS)
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Check if the user has already claimed the bonus today
+                cur.execute(
+                    "SELECT last_claimed FROM daily_bonus WHERE user_id = %s",
+                    (user_id,)
+                )
+                row = cur.fetchone()
+
+                if row and row['last_claimed'] == today:
+                    return False  # Already claimed today
+
+                # Update or insert the claim date
+                cur.execute(
+                    """
+                    INSERT INTO daily_bonus (user_id, last_claimed) 
+                    VALUES (%s, %s) 
+                    ON CONFLICT (user_id) DO UPDATE SET last_claimed = %s
+                    """,
+                    (user_id, today, today)
+                )
+
+                # Credit the daily bonus
+                update_user_balance(user_id, DAILY_BONUS)
+                log_user_activity(user_id, "daily_bonus", DAILY_BONUS)
+                conn.commit()
+
         return True
-    return False
+    except Exception as e:
+        logging.error(f"Error processing daily bonus for user {user_id}: {e}")
+        return False
 
 async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -337,6 +364,10 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     if show_back:
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')])
 
+    # Show loading animation before displaying the dashboard
+    target_message = update.message or update.callback_query.message
+    await show_loading_animation(target_message, "Loading dashboard", 1)
+
     # Handle cases where update.message is None
     if update.message:
         await update.message.reply_text(
@@ -532,6 +563,54 @@ async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT
                 ),
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Try Again", callback_data='check_membership')]])
             )
+
+async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the user's earning and withdrawal history"""
+    user_id = update.effective_user.id
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Fetch all types of transaction history
+                cur.execute(
+                    """
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s 
+                    ORDER BY timestamp DESC
+                    LIMIT 20
+                    """,
+                    (user_id,)
+                )
+                transactions = cur.fetchall() or []
+
+        # Format the message
+        message = "📜 Your Transaction History\n\n"
+
+        if transactions:
+            for transaction in transactions:
+                date = transaction['timestamp'].strftime("%Y-%m-%d")
+                activity = transaction['activity']
+                amount = transaction['amount']
+                message += f"• {date}: ₦{amount} ({activity})\n"
+        else:
+            message += "No transactions yet.\n"
+
+        # Add back button
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
+
+        if update.message:
+            await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        logging.error(f"Error fetching transaction history: {e}")
+        error_message = "❌ Error fetching history. Please try again later."
+        if update.message:
+            await update.message.reply_text(error_message)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(error_message)
+
 # User balance operations
 
 def get_user_balance(user_id):
@@ -577,12 +656,12 @@ def get_referrals(referrer_id):
 
 # User activity logging
 
-def log_user_activity(user_id, activity):
+def log_user_activity(user_id, activity, amount=0):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO user_activities (user_id, activity) VALUES (%s, %s)",
-                (user_id, activity)
+                "INSERT INTO user_activities (user_id, activity, amount, timestamp) VALUES (%s, %s, %s, NOW())",
+                (user_id, activity, amount)
             )
             conn.commit()
 
@@ -660,7 +739,12 @@ def generate_captcha_code(length=CAPTCHA_LENGTH):
 def generate_captcha_image(code):
     width, height = 220, 80
     image = Image.new('RGB', (width, height), (255, 255, 255))
-    font = ImageFont.truetype("arial.ttf", 48) if hasattr(ImageFont, 'truetype') else None
+    try:
+        # Attempt to load arial.ttf, fallback to default font if unavailable
+        font = ImageFont.truetype("arial.ttf", 48)
+    except OSError:
+        font = ImageFont.load_default()  # Use default font if arial.ttf is not available
+
     draw = ImageDraw.Draw(image)
     # Draw noisy background
     for _ in range(30):
@@ -674,10 +758,7 @@ def generate_captcha_image(code):
         x = 20 + i * 30 + random.randint(-5, 5)
         y = 15 + random.randint(-10, 10)
         color = tuple(random.randint(0, 150) for _ in range(3))
-        if font:
-            draw.text((x, y), char, font=font, fill=color)
-        else:
-            draw.text((x, y), char, fill=color)
+        draw.text((x, y), char, font=font, fill=color)
     # Add more noise
     image = image.filter(ImageFilter.GaussianBlur(1))
     return image
@@ -718,27 +799,23 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
 
 # Modified /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the start command"""
     user = update.effective_user
     args = context.args
-
     # Handle referral
     if args:
         try:
             referrer_id = int(args[0])
-            if referrer_id != user.id:  # Prevent self-referral
+            if referrer_id != user.id:
                 pending_referrals[user.id] = referrer_id
                 logging.info(f"Stored pending referral: {referrer_id} -> {user.id}")
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
-
     # Check if user is new (not verified)
     is_verified = is_user_verified(user.id)
     if not is_verified:
-        # New user: send CAPTCHA first
+        # New user: send CAPTCHA
         await send_captcha(update, context)
         return
-
     # Existing user: check membership
     is_member = await check_membership(user.id, context)
     if is_member:
@@ -2092,28 +2169,57 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
 
     try:
-        # Fetch transaction history from the database or in-memory storage
-        earnings = transaction_history.get(user_id, {}).get('earnings', [])
-        withdrawals = transaction_history.get(user_id, {}).get('withdrawals', [])
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Fetch earnings history
+                cur.execute(
+                    """
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%earning%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                    """,
+                    (user_id,)
+                )
+                earnings = cur.fetchall() or []
+
+                # Fetch withdrawal history
+                cur.execute(
+                    """
+                    SELECT activity, amount, timestamp 
+                    FROM user_activities 
+                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                    """,
+                    (user_id,)
+                )
+                withdrawals = cur.fetchall() or []
 
         # Format the message
         message = "📜 Your Transaction History\n\n"
 
         message += "💰 Recent Earnings:\n"
         if earnings:
-            for earning in earnings[-5:]:  # Show the last 5 earnings
-                message += f"• {earning['date']}: ₦{earning['amount']}\n"
+            for earning in earnings:
+                date = earning['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in earning else "Unknown Date"
+                amount = earning.get('amount', 0)
+                activity = earning.get('activity', 'Unknown Activity')
+                message += f"• {date}: +₦{amount} ({activity})\n"
         else:
-            message += "No earnings yet.\n"
+            message += "No recent earnings\n"
 
         message += "\n💸 Recent Withdrawals:\n"
         if withdrawals:
-            for withdrawal in withdrawals[-5:]:  # Show the last 5 withdrawals
-                message += f"• {withdrawal['date']}: ₦{withdrawal['amount']}\n"
+            for withdrawal in withdrawals:
+                date = withdrawal['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in withdrawal else "Unknown Date"
+                amount = withdrawal.get('amount', 0)
+                activity = withdrawal.get('activity', 'Unknown Activity')
+                message += f"• {date}: -₦{amount} ({activity})\n"
         else:
-            message += "No withdrawals yet.\n"
+            message += "No recent withdrawals\n"
 
-        # Send the message
         if update.message:
             await update.message.reply_text(message)
         elif update.callback_query:
@@ -2645,25 +2751,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             logging.warning(f"Invalid referrer ID: {args[0]}")
 
-    # Check if user is new (not verified)
-    is_verified = is_user_verified(user.id)
-    if not is_verified:
-        # New user: send CAPTCHA first
-        await send_captcha(update, context)
-        return
-
-    # Existing user: check membership
-    is_member = await check_membership(user.id, context)
-    if is_member:
-        # Already a member, show dashboard
-        keyboard = [[InlineKeyboardButton("Go to Dashboard", callback_data='back_to_menu')]]
-        await update.message.reply_text(
-            "👋 Welcome back! You are already verified.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        # Not a member, show verification menu
-        await show_verification_menu(update, context)
+    # Always show verification menu on /start
+    await show_verification_menu(update, context)
     return
 
 async def show_verification_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
