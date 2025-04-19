@@ -665,20 +665,12 @@ def set_withdrawal_time(user_id):
 
 # CAPTCHA Functions
 async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a math-based CAPTCHA to the user."""
+    """Send an alphanumeric CAPTCHA to the user."""
     user_id = update.effective_user.id
-
-    # Generate a simple math problem
-    num1 = random.randint(1, 10)
-    num2 = random.randint(1, 10)
-    correct_answer = num1 + num2
-
-    # Save the correct answer in user data
-    context.user_data['captcha_answer'] = correct_answer
+    captcha_code = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+    context.user_data['captcha_answer'] = captcha_code
     context.user_data['captcha_active'] = True
-
-    # Send the math problem to the user
-    question = f"🧮 Solve this CAPTCHA to proceed: {num1} + {num2} = ?"
+    question = f"🔒 Please solve this CAPTCHA to proceed: {captcha_code}"
     await update.message.reply_text(question)
 
 async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -689,25 +681,19 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
     if not context.user_data.get('captcha_active'):
         return  # Ignore if not expecting captcha
 
-    try:
-        # Check if the response matches the correct answer
-        correct_answer = context.user_data.get('captcha_answer')
-        if correct_answer is None:
-            await update.message.reply_text("❌ CAPTCHA expired. Please try again.")
-            await send_captcha(update, context)
-            return
+    correct_answer = context.user_data.get('captcha_answer')
+    if correct_answer is None:
+        await update.message.reply_text("❌ CAPTCHA expired. Please try again.")
+        await send_captcha(update, context)
+        return
 
-        if int(user_response) == correct_answer:
-            await update.message.reply_text("✅ CAPTCHA solved! Now verify your membership to continue.")
-            context.user_data.pop('captcha_answer', None)  # Clear the CAPTCHA answer
-            context.user_data['captcha_active'] = False
-            # After solving CAPTCHA, show verification menu (do not allow bypass)
-            await show_verification_menu(update, context)
-        else:
-            await update.message.reply_text("❌ Incorrect answer. Please try again.")
-            await send_captcha(update, context)
-    except ValueError:
-        await update.message.reply_text("❌ Please enter a valid number.")
+    if user_response == correct_answer:
+        await update.message.reply_text("✅ CAPTCHA solved! Now verify your membership to continue.")
+        context.user_data.pop('captcha_answer', None)
+        context.user_data['captcha_active'] = False
+        await show_verification_menu(update, context)
+    else:
+        await update.message.reply_text("❌ Incorrect CAPTCHA. Please try again.")
         await send_captcha(update, context)
 
 # Modified /start handler
@@ -3077,7 +3063,8 @@ async def handle_send_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Try to resolve user_id from username if needed
     if target.startswith("@"):  # Username
         try:
-            chat = await context.bot.get_chat(target)
+            username = target.lstrip("@")
+            chat = await context.bot.get_chat(username)
             target_id = chat.id
         except Exception as e:
             await update.message.reply_text(f"❌ Could not find user {target}: {e}")
