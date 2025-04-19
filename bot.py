@@ -3064,6 +3064,36 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching user ID for @{username}: {str(e)}")
 
+async def handle_send_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not await is_admin(user.id):
+        await update.message.reply_text("❌ This command is only for admins!")
+        return
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("❌ Usage: /send <user_id|@username> <message>")
+        return
+    target = context.args[0]
+    message = " ".join(context.args[1:])
+    # Try to resolve user_id from username if needed
+    if target.startswith("@"):  # Username
+        try:
+            chat = await context.bot.get_chat(target)
+            target_id = chat.id
+        except Exception as e:
+            await update.message.reply_text(f"❌ Could not find user {target}: {e}")
+            return
+    else:
+        try:
+            target_id = int(target)
+        except ValueError:
+            await update.message.reply_text("❌ Invalid user ID.")
+            return
+    try:
+        await context.bot.send_message(chat_id=target_id, text=message)
+        await update.message.reply_text("✅ Message sent.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed to send message: {e}")
+
 def main():
     # Get environment variables with fallbacks
     token = os.getenv("BOT_TOKEN")
@@ -3147,6 +3177,7 @@ def main():
     application.add_handler(CommandHandler("db", admin_dashboard))
     application.add_handler(CommandHandler("del", handle_del_command))  # Add the /del command handler
     application.add_handler(CommandHandler("id", get_user_id))  # Add the /id command handler
+    application.add_handler(CommandHandler("send", handle_send_command))  # Add the /send command handler
 
     # Register message and button handlers
     application.add_handler(CallbackQueryHandler(button_handler))
