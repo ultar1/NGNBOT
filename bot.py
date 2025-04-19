@@ -306,6 +306,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     # Fetch user details
     balance = get_user_balance(user_id)
     referral_count = len(get_referrals(user_id))
+    total_earnings = referral_count * REFERRAL_BONUS + balance
 
     # Construct the dashboard message
     dashboard_message = (
@@ -313,7 +314,10 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         f"───────────────\n"
         f"💰 Balance: ₦{balance}\n"
         f"👥 Referrals: {referral_count}\n"
-        f"📅 Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n\n"
+        f"📈 Total Earnings: ₦{total_earnings}\n"
+        f"📅 Min. Withdrawal: ₦{MIN_WITHDRAWAL}\n"
+        f"🎁 Daily Bonus: ₦{DAILY_BONUS}\n"
+        f"🏆 Top Referrer Bonus: ₦{TOP_REFERRER_BONUS}\n\n"
         f"What would you like to do?"
     )
 
@@ -1766,11 +1770,10 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_task_1_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show Task 1 instructions"""
     keyboard = [
-        [InlineKeyboardButton("📤 Submit Screenshot", callback_data='submit_task_1')],
         [InlineKeyboardButton("🔙 Back to Tasks", callback_data='tasks')],
         [InlineKeyboardButton("🏠 Main Menu", callback_data='back_to_menu')]
     ]
-    
+
     await update.callback_query.message.edit_text(
         "📱 Task 1: Share Referral Link\n"
         "═══════════════════════\n\n"
@@ -1779,8 +1782,7 @@ async def handle_task_1_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "2. Share your referral link on any social media\n"
         "3. Take a screenshot showing:\n"
         "   • Your post with the referral link, OR\n"
-        "   • Your content/review about our bot\n"
-        "4. Send the screenshot using /task command\n\n"
+        "   • Your content/review about our bot\n\n"
         f"Reward: ₦{TASK_REWARD}\n\n"
         "Note: Your submission will be reviewed by admin",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -1790,18 +1792,16 @@ async def handle_task_2_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Show Task 2 instructions"""
     keyboard = [
         [InlineKeyboardButton("👥 Join Group", url="https://t.me/+qm80EPssXow4NTU1")],
-        [InlineKeyboardButton("📤 Submit Screenshot", callback_data='submit_task_2')],
         [InlineKeyboardButton("🔙 Back to Tasks", callback_data='tasks')],
         [InlineKeyboardButton("🏠 Main Menu", callback_data='back_to_menu')]
     ]
-    
+
     await update.callback_query.message.edit_text(
         "👥 Task 2: Join Our Community\n"
         "═══════════════════════\n\n"
         "Instructions:\n"
         "1. Join our community group using the button below\n"
-        "2. Take a screenshot showing that you've joined\n"
-        "3. Send the screenshot using /task command\n\n"
+        "2. Take a screenshot showing that you've joined\n\n"
         f"Reward: ₦{TASK_REWARD}\n\n"
         "Note: Your submission will be reviewed by admin",
         reply_markup=InlineKeyboardMarkup(keyboard)
