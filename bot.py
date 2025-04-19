@@ -325,11 +325,9 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     buttons = [
         [InlineKeyboardButton("💰 Check History", callback_data='history'), InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
         [InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals'), InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus')],
-        [InlineKeyboardButton("📋 Tasks", callback_data='tasks'), InlineKeyboardButton("❓ Help", callback_data='help')]
+        [InlineKeyboardButton("📋 Tasks", callback_data='tasks'), InlineKeyboardButton("📝 Quiz", callback_data='quiz')],
+        [InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
-
-    # Add Quiz button to the dashboard
-    buttons.append([InlineKeyboardButton("📝 Quiz", callback_data='quiz')])
 
     if show_back:
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')])
