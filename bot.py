@@ -33,6 +33,7 @@ last_chat_reward = {}
 active_coupons = {}
 used_coupons = {}
 last_weekly_reward = datetime.now()
+user_task_last_completed = {}
 
 # CAPTCHA State
 CAPTCHA_TIMEOUT = 10  # seconds
@@ -675,18 +676,15 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the user's response to the CAPTCHA."""
-    user_response = update.message.text
     user_id = update.effective_user.id
-
+    user_response = update.message.text
     if not context.user_data.get('captcha_active'):
-        return  # Ignore if not expecting captcha
-
+        return  # Only respond if CAPTCHA is active
     correct_answer = context.user_data.get('captcha_answer')
     if correct_answer is None:
         await update.message.reply_text("❌ CAPTCHA expired. Please try again.")
         await send_captcha(update, context)
         return
-
     if user_response == correct_answer:
         await update.message.reply_text("✅ CAPTCHA solved! Now verify your membership to continue.")
         context.user_data.pop('captcha_answer', None)
@@ -1733,6 +1731,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle task submission with screenshot"""
     user = update.effective_user
+    user_id = user.id
+    now = datetime.now()
+
+    # Weekly cooldown: only allow once every 7 days
+    last_completed = user_task_last_completed.get(user_id)
+    if last_completed and (now - last_completed).days < 7:
+        next_time = last_completed + timedelta(days=7)
+        await update.message.reply_text(f"❌ You can only submit a task once every 7 days. Next available: {next_time.strftime('%Y-%m-%d')}")
+        return
 
     # Check membership
     is_member = await check_membership(user.id, context)
@@ -1780,6 +1787,10 @@ async def handle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             "✅ Your task screenshot has been submitted for review!\n"
             "You will receive your reward once approved."
         )
+
+        # On successful submission:
+        user_task_last_completed[user_id] = now
+
     except Exception as e:
         await update.message.reply_text(
             "❌ Error submitting task. Please try again later."
@@ -3265,3 +3276,8 @@ def get_user_task_earnings(user_id):
     except Exception as e:
         logging.error(f"Error fetching task earnings for user {user_id}: {e}")
         return 0
+
+# --- SQL Migration Instructions ---
+# To fix your database, run this SQL in your PostgreSQL database:
+# ALTER TABLE user_activities ADD COLUMN amount FLOAT;
+# ALTER TABLE user_activities ADD COLUMN timestamp TIMESTAMP DEFAULT NOW();
