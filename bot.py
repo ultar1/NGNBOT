@@ -342,7 +342,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         [InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus'), InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
         [InlineKeyboardButton("📝 Quiz", callback_data='quiz'), InlineKeyboardButton("📋 Tasks", callback_data='tasks')],
         [InlineKeyboardButton("📜 Check History", callback_data='show_history'), InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')],
-        [InlineKeyboardButton("❓ Help", callback_data='help')]
+        [InlineKeyboardButton("❓ Help", callback_data='help'), InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')]
     ]
 
     if show_back:
