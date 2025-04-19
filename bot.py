@@ -1995,7 +1995,7 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
                     """,
                     (user_id,)
                 )
-                earnings = cur.fetchall()
+                earnings = cur.fetchall() or []
 
                 # Fetch withdrawal history
                 cur.execute(
@@ -2008,23 +2008,28 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
                     """,
                     (user_id,)
                 )
-                withdrawals = cur.fetchall()
+                withdrawals = cur.fetchall() or []
 
+        # Format the message
         message = "📜 Your Transaction History\n\n"
 
         message += "💰 Recent Earnings:\n"
         if earnings:
             for earning in earnings:
-                date = earning['timestamp'].strftime("%Y-%m-%d")
-                message += f"• {date}: +₦{earning['amount']} ({earning['activity']})\n"
+                date = earning['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in earning else "Unknown Date"
+                amount = earning.get('amount', 0)
+                activity = earning.get('activity', 'Unknown Activity')
+                message += f"• {date}: +₦{amount} ({activity})\n"
         else:
             message += "No recent earnings\n"
 
         message += "\n💸 Recent Withdrawals:\n"
         if withdrawals:
             for withdrawal in withdrawals:
-                date = withdrawal['timestamp'].strftime("%Y-%m-%d")
-                message += f"• {date}: -₦{withdrawal['amount']} ({withdrawal['activity']})\n"
+                date = withdrawal['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in withdrawal else "Unknown Date"
+                amount = withdrawal.get('amount', 0)
+                activity = withdrawal.get('activity', 'Unknown Activity')
+                message += f"• {date}: -₦{amount} ({activity})\n"
         else:
             message += "No recent withdrawals\n"
 
