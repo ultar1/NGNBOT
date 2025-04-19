@@ -328,9 +328,9 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
 
     # Define the dashboard buttons
     buttons = [
-        [InlineKeyboardButton("💰 Check History", callback_data='history'), InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
-        [InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals'), InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus')],
-        [InlineKeyboardButton("📋 Tasks", callback_data='tasks'), InlineKeyboardButton("📝 Quiz", callback_data='quiz')],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus'), InlineKeyboardButton("👥 My Referrals", callback_data='my_referrals')],
+        [InlineKeyboardButton("📝 Quiz", callback_data='quiz'), InlineKeyboardButton("📋 Tasks", callback_data='tasks')],
+        [InlineKeyboardButton("📜 Check History", callback_data='show_history'), InlineKeyboardButton("🏆 Top Referrals", callback_data='top_referrals')],
         [InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
 
@@ -2092,57 +2092,28 @@ async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
 
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Fetch earnings history
-                cur.execute(
-                    """
-                    SELECT activity, amount, timestamp 
-                    FROM user_activities 
-                    WHERE user_id = %s AND activity LIKE '%earning%'
-                    ORDER BY timestamp DESC
-                    LIMIT 10
-                    """,
-                    (user_id,)
-                )
-                earnings = cur.fetchall() or []
-
-                # Fetch withdrawal history
-                cur.execute(
-                    """
-                    SELECT activity, amount, timestamp 
-                    FROM user_activities 
-                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
-                    ORDER BY timestamp DESC
-                    LIMIT 10
-                    """,
-                    (user_id,)
-                )
-                withdrawals = cur.fetchall() or []
+        # Fetch transaction history from the database or in-memory storage
+        earnings = transaction_history.get(user_id, {}).get('earnings', [])
+        withdrawals = transaction_history.get(user_id, {}).get('withdrawals', [])
 
         # Format the message
         message = "📜 Your Transaction History\n\n"
 
         message += "💰 Recent Earnings:\n"
         if earnings:
-            for earning in earnings:
-                date = earning['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in earning else "Unknown Date"
-                amount = earning.get('amount', 0)
-                activity = earning.get('activity', 'Unknown Activity')
-                message += f"• {date}: +₦{amount} ({activity})\n"
+            for earning in earnings[-5:]:  # Show the last 5 earnings
+                message += f"• {earning['date']}: ₦{earning['amount']}\n"
         else:
-            message += "No recent earnings\n"
+            message += "No earnings yet.\n"
 
         message += "\n💸 Recent Withdrawals:\n"
         if withdrawals:
-            for withdrawal in withdrawals:
-                date = withdrawal['timestamp'].strftime("%Y-%m-%d") if 'timestamp' in withdrawal else "Unknown Date"
-                amount = withdrawal.get('amount', 0)
-                activity = withdrawal.get('activity', 'Unknown Activity')
-                message += f"• {date}: -₦{amount} ({activity})\n"
+            for withdrawal in withdrawals[-5:]:  # Show the last 5 withdrawals
+                message += f"• {withdrawal['date']}: ₦{withdrawal['amount']}\n"
         else:
-            message += "No recent withdrawals\n"
+            message += "No withdrawals yet.\n"
 
+        # Send the message
         if update.message:
             await update.message.reply_text(message)
         elif update.callback_query:
