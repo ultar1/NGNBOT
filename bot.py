@@ -67,7 +67,7 @@ MAX_WITHDRAWAL = 1000
 LEAVE_PENALTY = 200
 CHAT_REWARD = 1
 MAX_DAILY_CHAT_REWARD = 50
-TASK_REWARD = 250  # Updated from 100 to 250
+TASK_REWARD = 200  # Updated from 250 to 200
 WITHDRAWAL_AMOUNTS = [500, 1000, 1500]  # Available withdrawal amounts
 
 # Common Nigerian Banks
@@ -675,6 +675,7 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Save the correct answer in user data
     context.user_data['captcha_answer'] = correct_answer
+    context.user_data['captcha_active'] = True
 
     # Send the math problem to the user
     question = f"🧮 Solve this CAPTCHA to proceed: {num1} + {num2} = ?"
@@ -684,6 +685,9 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
     """Handle the user's response to the CAPTCHA."""
     user_response = update.message.text
     user_id = update.effective_user.id
+
+    if not context.user_data.get('captcha_active'):
+        return  # Ignore if not expecting captcha
 
     try:
         # Check if the response matches the correct answer
@@ -696,6 +700,7 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
         if int(user_response) == correct_answer:
             await update.message.reply_text("✅ CAPTCHA solved! Now verify your membership to continue.")
             context.user_data.pop('captcha_answer', None)  # Clear the CAPTCHA answer
+            context.user_data['captcha_active'] = False
             # After solving CAPTCHA, show verification menu (do not allow bypass)
             await show_verification_menu(update, context)
         else:
@@ -1866,7 +1871,8 @@ async def handle_tasks_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         "Choose a task to complete:\n\n"
         "1️⃣ Share your referral link\n"
         "2️⃣ Join our community group\n\n"
-        "Select a task to view instructions!",
+        "Select a task to view instructions!\n\n"
+        "After completing any task, use /task to submit your screenshot.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1887,7 +1893,8 @@ async def handle_task_1_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "   • Your post with the referral link, OR\n"
         "   • Your content/review about our bot\n\n"
         f"Reward: ₦{TASK_REWARD}\n\n"
-        "Note: Your submission will be reviewed by admin",
+        "Note: Your submission will be reviewed by admin.\n"
+        "After completing, use /task to submit your screenshot.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1906,7 +1913,8 @@ async def handle_task_2_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "1. Join our community group using the button below\n"
         "2. Take a screenshot showing that you've joined\n\n"
         f"Reward: ₦{TASK_REWARD}\n\n"
-        "Note: Your submission will be reviewed by admin",
+        "Note: Your submission will be reviewed by admin.\n"
+        "After completing, use /task to submit your screenshot.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -3021,7 +3029,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💰 Earning Methods:\n"
         "• Daily Quiz: ₦50\n"
         "• Referrals: ₦80/referral\n"
-        "• Tasks: ₦250/task\n"
+        "• Tasks: ₦200/task\n"
         "• Daily Bonus: ₦25\n"
         "• Group Chat: ₦1/message (max 50/day)\n\n"
         "💳 Withdrawal Info:\n"
