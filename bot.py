@@ -2275,6 +2275,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 # Ensure database tables exist
 def initialize_database():
+    """Ensure the required database tables exist."""
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -2302,6 +2303,15 @@ def initialize_database():
                         user_id BIGINT NOT NULL REFERENCES user_balances(user_id),
                         amount FLOAT NOT NULL,
                         earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                # Create top_referrals table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS top_referrals (
+                        user_id BIGINT PRIMARY KEY,
+                        referral_count INT NOT NULL,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
 
@@ -3073,6 +3083,7 @@ def main():
                     print(f"Removed referral {referred_id} for referrer {referrer_id}")
 
 if __name__ == '__main__':
+    initialize_database()
     main()
 
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
