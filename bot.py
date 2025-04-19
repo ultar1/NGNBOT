@@ -716,7 +716,7 @@ async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_
         context.user_data.pop('captcha_code', None)
         context.user_data.pop('captcha_time', None)
 
-# --- Modified /start handler ---
+# Modified /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
@@ -747,6 +747,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Not a member, show verification menu
         await show_verification_menu(update, context)
+    return
+
+# Update the start command to include language selection
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the start command"""
+    user = update.effective_user
+    args = context.args
+
+    # Handle referral
+    if args:
+        try:
+            referrer_id = int(args[0])
+            if referrer_id != user.id:  # Prevent self-referral
+                pending_referrals[user.id] = referrer_id
+                logging.info(f"Stored pending referral: {referrer_id} -> {user.id}")
+        except ValueError:
+            logging.warning(f"Invalid referrer ID: {args[0]}")
+
+    # Always show verification menu on /start
+    await show_verification_menu(update, context)
     return
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
