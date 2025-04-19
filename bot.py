@@ -330,11 +330,23 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     if show_back:
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')])
 
-    # Send the dashboard message
-    await update.message.reply_text(
-        dashboard_message,
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
+    # Handle cases where update.message is None
+    if update.message:
+        await update.message.reply_text(
+            dashboard_message,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    elif update.callback_query and update.callback_query.message:
+        await update.callback_query.message.edit_text(
+            dashboard_message,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=dashboard_message,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
 
 async def handle_verify_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle verification button click"""
