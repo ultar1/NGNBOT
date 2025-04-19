@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 import time
 from telegram.error import TelegramError
 import io
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # Global state tracking variables
 user_quiz_status = {}
@@ -37,7 +36,6 @@ last_weekly_reward = datetime.now()
 
 # CAPTCHA State
 CAPTCHA_TIMEOUT = 10  # seconds
-CAPTCHA_LENGTH = 6
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -653,68 +651,40 @@ def set_withdrawal_time(user_id):
             conn.commit()
 
 # CAPTCHA Functions
-def generate_captcha_code(length=CAPTCHA_LENGTH):
-    chars = string.ascii_letters + string.digits
-    return ''.join(random.choices(chars, k=length))
-
-def generate_captcha_image(code):
-    width, height = 220, 80
-    image = Image.new('RGB', (width, height), (255, 255, 255))
-    font = ImageFont.truetype("arial.ttf", 48) if hasattr(ImageFont, 'truetype') else None
-    draw = ImageDraw.Draw(image)
-    # Draw noisy background
-    for _ in range(30):
-        x1 = random.randint(0, width)
-        y1 = random.randint(0, height)
-        x2 = random.randint(0, width)
-        y2 = random.randint(0, height)
-        draw.line(((x1, y1), (x2, y2)), fill=(random.randint(0,255), random.randint(0,255), random.randint(0,255)), width=2)
-    # Draw the code
-    for i, char in enumerate(code):
-        x = 20 + i * 30 + random.randint(-5, 5)
-        y = 15 + random.randint(-10, 10)
-        color = tuple(random.randint(0, 150) for _ in range(3))
-        if font:
-            draw.text((x, y), char, font=font, fill=color)
-        else:
-            draw.text((x, y), char, fill=color)
-    # Add more noise
-    image = image.filter(ImageFilter.GaussianBlur(1))
-    return image
-
 async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    code = generate_captcha_code()
-    image = generate_captcha_image(code)
-    buf = io.BytesIO()
-    image.save(buf, format='PNG')
-    buf.seek(0)
-    context.user_data['captcha_code'] = code
-    context.user_data['captcha_time'] = datetime.now().timestamp()
-    context.user_data['captcha_passed'] = False
-    await update.message.reply_photo(photo=buf, caption="🔐 Please enter the code above (case-sensitive). You have 10 seconds.")
+    """Send a math-based CAPTCHA to the user."""
+    user_id = update.effective_user.id
+
+    # Generate a simple math problem
+    num1 = random.randint(1, 10)
+    num2 = random.randint(1, 10)
+    correct_answer = num1 + num2
+
+    # Save the correct answer in user data
+    context.user_data['captcha_answer'] = correct_answer
+
+    # Send the math problem to the user
+    question = f"🧮 Solve this CAPTCHA to proceed: {num1} + {num2} = ?"
+    await update.message.reply_text(question)
 
 async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if 'captcha_code' not in context.user_data:
-        return  # Not expecting a captcha
-    user_code = update.message.text.strip()
-    real_code = context.user_data.get('captcha_code')
-    start_time = context.user_data.get('captcha_time', 0)
-    now = datetime.now().timestamp()
-    if now - start_time > CAPTCHA_TIMEOUT:
-        await update.message.reply_text("⏰ Time's up! Please use /start to try again.")
-        context.user_data.pop('captcha_code', None)
-        context.user_data.pop('captcha_time', None)
-        return
-    if user_code == real_code:
-        context.user_data['captcha_passed'] = True
-        context.user_data.pop('captcha_code', None)
-        context.user_data.pop('captcha_time', None)
-        await update.message.reply_text("✅ CAPTCHA passed! Proceeding to verification...")
-        await show_verification_menu(update, context)
-    else:
-        await update.message.reply_text("❌ Incorrect code! Please use /start to try again.")
-        context.user_data.pop('captcha_code', None)
-        context.user_data.pop('captcha_time', None)
+    """Handle the user's response to the CAPTCHA."""
+    user_response = update.message.text
+
+    try:
+        # Check if the response matches the correct answer
+        correct_answer = context.user_data.get('captcha_answer')
+        if correct_answer is None:
+            await update.message.reply_text("❌ CAPTCHA expired. Please try again.")
+            return
+
+        if int(user_response) == correct_answer:
+            await update.message.reply_text("✅ CAPTCHA solved! You can now proceed.")
+            context.user_data.pop('captcha_answer', None)  # Clear the CAPTCHA answer
+        else:
+            await update.message.reply_text("❌ Incorrect answer. Please try again.")
+    except ValueError:
+        await update.message.reply_text("❌ Please enter a valid number.")
 
 # Modified /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
