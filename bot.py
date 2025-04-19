@@ -113,13 +113,25 @@ def generate_coupon_code(length=8):
 
 async def check_and_credit_daily_bonus(user_id: int) -> bool:
     today = datetime.now().date()
-    last_date = last_signin.get(user_id)
-    
-    if last_date is None or last_date < today:
-        last_signin[user_id] = today
-        update_user_balance(user_id, DAILY_BONUS)
-        return True
-    return False
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Check if user has already claimed today
+            cur.execute("""
+                SELECT 1 FROM user_activities
+                WHERE user_id = %s AND activity = 'daily_bonus' AND DATE(timestamp) = %s
+                LIMIT 1
+            """, (user_id, today))
+            already_claimed = cur.fetchone()
+            if already_claimed:
+                return False
+            # Credit bonus
+            update_user_balance(user_id, DAILY_BONUS)
+            cur.execute(
+                "INSERT INTO user_activities (user_id, activity, amount, timestamp) VALUES (%s, %s, %s, NOW())",
+                (user_id, 'daily_bonus', DAILY_BONUS)
+            )
+            conn.commit()
+            return True
 
 async def notify_admin_new_user(user_id: int, user_info: dict, referrer_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -2072,43 +2084,57 @@ def log_transaction(user_id: int, transaction_type: str, amount: int):
     })
 
 async def show_transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the user's earning and withdrawal history"""
+    """Show the user's earning and withdrawal history from DB, with back button"""
     user_id = update.effective_user.id
-
     try:
-        # Fetch transaction history from the database or in-memory storage
-        earnings = transaction_history.get(user_id, {}).get('earnings', [])
-        withdrawals = transaction_history.get(user_id, {}).get('withdrawals', [])
-
-        # Format the message
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get all earnings (daily_bonus, referral_bonus, coupon_bonus, admin_add, quiz, task, etc.)
+                cur.execute("""
+                    SELECT activity, amount, timestamp FROM user_activities
+                    WHERE user_id = %s AND (
+                        activity IN ('daily_bonus', 'referral_bonus', 'coupon_bonus', 'admin_add', 'quiz', 'task', 'milestone_reward_5', 'milestone_reward_10', 'milestone_reward_20', 'milestone_reward_50', 'milestone_reward_100')
+                        OR activity LIKE 'milestone_reward%'
+                    )
+                    ORDER BY timestamp DESC LIMIT 10
+                """, (user_id,))
+                earnings = cur.fetchall()
+                # Get all withdrawals
+                cur.execute("""
+                    SELECT activity, amount, timestamp FROM user_activities
+                    WHERE user_id = %s AND activity LIKE '%withdrawal%'
+                    ORDER BY timestamp DESC LIMIT 10
+                """, (user_id,))
+                withdrawals = cur.fetchall()
         message = "📜 Your Transaction History\n\n"
-
         message += "💰 Recent Earnings:\n"
         if earnings:
-            for earning in earnings[-5:]:  # Show the last 5 earnings
-                message += f"• {earning['date']}: ₦{earning['amount']}\n"
+            for earning in earnings:
+                date = earning['timestamp'].strftime("%Y-%m-%d")
+                label = earning['activity'].replace('_', ' ').title()
+                message += f"• {date}: +₦{earning['amount']} ({label})\n"
         else:
             message += "No earnings yet.\n"
-
         message += "\n💸 Recent Withdrawals:\n"
         if withdrawals:
-            for withdrawal in withdrawals[-5:]:  # Show the last 5 withdrawals
-                message += f"• {withdrawal['date']}: ₦{withdrawal['amount']}\n"
+            for withdrawal in withdrawals:
+                date = withdrawal['timestamp'].strftime("%Y-%m-%d")
+                label = withdrawal['activity'].replace('_', ' ').title()
+                message += f"• {date}: -₦{withdrawal['amount']} ({label})\n"
         else:
             message += "No withdrawals yet.\n"
-
-        # Send the message
+        keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
         if update.message:
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
         elif update.callback_query:
-            await update.callback_query.message.edit_text(message)
+            await update.callback_query.message.edit_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
-        logging.error(f"Error fetching transaction history: {e}")
         error_message = "❌ Error fetching history. Please try again later."
         if update.message:
             await update.message.reply_text(error_message)
         elif update.callback_query:
             await update.callback_query.message.edit_text(error_message)
+
 # Add admin dashboard
 async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show comprehensive admin dashboard"""
