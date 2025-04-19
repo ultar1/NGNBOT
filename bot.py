@@ -1380,25 +1380,28 @@ async def show_top_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT user_id, referral_count 
                     FROM top_referrals 
                     ORDER BY referral_count DESC 
                     LIMIT 5
-                """)
-                top_referrers = cur.fetchall()
+                    """
+                )
+                top_referrers = cur.fetchall() or []
 
         message = "🏆 Top 5 Referrers:\n\n"
 
-        for i, referrer in enumerate(top_referrers, 1):
-            try:
-                user = await context.bot.get_chat(referrer['user_id'])
-                username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
-                message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
-            except Exception as e:
-                message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
-
-        if not top_referrers:
+        if top_referrers:
+            for i, referrer in enumerate(top_referrers, 1):
+                try:
+                    user = await context.bot.get_chat(referrer['user_id'])
+                    username = f"@{user.username}" if user.username else f"User {referrer['user_id']}"
+                    message += f"{i}. {username} - {referrer['referral_count']} referrals\n"
+                except Exception as e:
+                    logging.error(f"Error fetching user details for user_id {referrer['user_id']}: {e}")
+                    message += f"{i}. User {referrer['user_id']} - {referrer['referral_count']} referrals\n"
+        else:
             message += "No referrals yet!"
 
         keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data='back_to_menu')]]
