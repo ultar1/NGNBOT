@@ -314,6 +314,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
     # Construct the dashboard message
     dashboard_message = (
         f"👤 Welcome, {user.first_name} {user.last_name if user.last_name else ''}\n"
+        f"User ID: {user_id}\n"
         f"───────────────\n"
         f"💰 Balance: ₦{balance}\n"
         f"👥 Referrals: {referral_count}\n"
@@ -670,21 +671,27 @@ async def send_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_captcha_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the user's response to the CAPTCHA."""
     user_response = update.message.text
+    user_id = update.effective_user.id
 
     try:
         # Check if the response matches the correct answer
         correct_answer = context.user_data.get('captcha_answer')
         if correct_answer is None:
             await update.message.reply_text("❌ CAPTCHA expired. Please try again.")
+            await send_captcha(update, context)
             return
 
         if int(user_response) == correct_answer:
-            await update.message.reply_text("✅ CAPTCHA solved! You can now proceed.")
+            await update.message.reply_text("✅ CAPTCHA solved! Now verify your membership to continue.")
             context.user_data.pop('captcha_answer', None)  # Clear the CAPTCHA answer
+            # After solving CAPTCHA, show verification menu (do not allow bypass)
+            await show_verification_menu(update, context)
         else:
             await update.message.reply_text("❌ Incorrect answer. Please try again.")
+            await send_captcha(update, context)
     except ValueError:
         await update.message.reply_text("❌ Please enter a valid number.")
+        await send_captcha(update, context)
 
 # Modified /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1672,6 +1679,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_verified(user_id):
         await show_verification_menu(update, context)
         return
+
+    # Show loading animation for dashboard buttons before showing result
+    dashboard_loading_buttons = [
+        'my_referrals', 'top_referrals', 'daily_bonus', 'tasks', 'quiz', 'help', 'show_history'
+    ]
+    if query.data in dashboard_loading_buttons:
+        await show_loading_animation(query.message, "Loading", 1)
 
     # Handle other buttons only if verified
     if query.data == 'back_to_menu':
