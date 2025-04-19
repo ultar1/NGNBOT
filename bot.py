@@ -328,6 +328,9 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, sho
         [InlineKeyboardButton("📋 Tasks", callback_data='tasks'), InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
 
+    # Add Quiz button to the dashboard
+    buttons.append([InlineKeyboardButton("📝 Quiz", callback_data='quiz')])
+
     if show_back:
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data='back_to_menu')])
 
